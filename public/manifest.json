@@ -1,0 +1,20 @@
+{
+  "name": "أزياء لاين الرجالية",
+  "short_name": "LINE Store",
+  "description": "متجر أزياء لاين الرجالية - تسوق أرقى الملابس الرجالية",
+  "start_url": "/store/line",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0d10",
+  "theme_color": "#d4af37",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

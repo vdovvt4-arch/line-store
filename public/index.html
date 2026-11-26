@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#d4af37">
 <title>لوحة الإدارة | أزياء لاين الرجالية</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -16,7 +19,7 @@
   --line:#dfe4ec;--txt:#11161d;--mut:#5f6977;--shadow:0 8px 24px rgba(17,22,29,.07);
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font-family:Cairo,system-ui,sans-serif;transition:background .2s,color .2s}
+body{margin:0;background:var(--bg);background-image:radial-gradient(ellipse at top right,color-mix(in srgb,var(--g1) 7%,transparent),transparent 52%),radial-gradient(ellipse at bottom left,color-mix(in srgb,var(--g2) 6%,transparent),transparent 52%);color:var(--txt);font-family:Cairo,system-ui,sans-serif;transition:background .2s,color .2s}
 .shell{display:grid;grid-template-columns:270px 1fr;min-height:100vh}
 .sidebar{background:var(--side);border-left:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh;overflow-y:auto;scrollbar-width:thin}
 .brand-box{display:flex;align-items:center;gap:12px;padding:4px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:4px}
@@ -49,11 +52,12 @@ body{margin:0;background:var(--bg);color:var(--txt);font-family:Cairo,system-ui,
 .btn-del{background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.35);color:var(--err)}
 
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin-bottom:16px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.kpi::after{content:"";position:absolute;top:0;right:0;left:0;height:3px;background:linear-gradient(90deg,var(--g1),var(--g2));opacity:.7}
-.kpi .val{font-size:24px;font-weight:900;margin-top:6px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .18s,border-color .18s}
+.kpi:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--g1) 45%,var(--line))}
+.kpi::after{content:"";position:absolute;top:0;right:0;left:0;height:3px;background:linear-gradient(90deg,var(--g1),var(--g2));opacity:.85}
+.kpi .val{font-size:24px;font-weight:900;margin-top:6px;font-variant-numeric:tabular-nums}
 .muted{color:var(--mut);font-size:13px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
 .card h2,.card h3{margin-top:0}
 .quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
 .list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:14px}
@@ -70,14 +74,16 @@ input,select,textarea{width:100%;padding:10px 12px;border-radius:11px;border:1px
 input[type="color"]{height:44px;padding:4px;cursor:pointer}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;justify-content:center;align-items:flex-start;overflow:auto;padding:16px;z-index:50}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.74);backdrop-filter:blur(6px);display:none;justify-content:center;align-items:flex-start;overflow:auto;padding:16px;z-index:50}
 .overlay.open{display:flex}
-.modal{background:var(--card);border:1px solid var(--line);border-radius:20px;width:100%;max-width:740px;padding:20px;margin:auto;position:relative;box-shadow:var(--shadow)}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:22px;width:100%;max-width:740px;padding:22px;margin:auto;position:relative;box-shadow:var(--shadow)}
 .close{position:absolute;top:12px;left:14px;background:var(--card2);border:1px solid var(--line);border-radius:50%;width:34px;height:34px;color:var(--txt);font-size:20px;cursor:pointer;display:grid;place-items:center}
 .login-box{max-width:390px;margin:90px auto;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:var(--shadow)}
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
-th,td{border-bottom:1px solid var(--line);padding:11px 8px;text-align:right;vertical-align:middle}
+th{font-size:12px;color:var(--mut);font-weight:800;background:color-mix(in srgb,var(--card2) 60%,transparent)}
+th,td{border-bottom:1px solid var(--line);padding:11px 10px;text-align:right;vertical-align:middle}
+tbody tr:hover td{background:color-mix(in srgb,var(--card2) 32%,transparent)}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .thumb{position:relative;width:72px;height:88px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
 .thumb img{width:100%;height:100%;object-fit:cover}
@@ -1379,6 +1385,33 @@ function renderSettings() {
         </div>
       </div>
 
+      <div class="row3" style="margin-top:10px">
+        <div>
+          <label>نوع الخط في المتجر</label>
+          <select id="sFont">
+            <option value="cairo" ${(st.font_style || 'cairo') === 'cairo' ? 'selected' : ''}>Cairo (عصري)</option>
+            <option value="tajawal" ${st.font_style === 'tajawal' ? 'selected' : ''}>Tajawal (ناعم)</option>
+            <option value="alexandria" ${st.font_style === 'alexandria' ? 'selected' : ''}>Alexandria (هندسي)</option>
+          </select>
+        </div>
+        <div>
+          <label>شكل الأزرار</label>
+          <select id="sBtnStyle">
+            <option value="rounded" ${(st.btn_style || 'rounded') === 'rounded' ? 'selected' : ''}>زوايا ناعمة</option>
+            <option value="pill" ${st.btn_style === 'pill' ? 'selected' : ''}>دائري بالكامل (Pill)</option>
+            <option value="sharp" ${st.btn_style === 'sharp' ? 'selected' : ''}>حادة كلاسيكية</option>
+          </select>
+        </div>
+        <div>
+          <label>نسبة صور المنتجات</label>
+          <select id="sCardRatio">
+            <option value="3/4" ${(st.card_ratio || '3/4') === '3/4' ? 'selected' : ''}>طولي قياسي (3:4)</option>
+            <option value="4/5" ${st.card_ratio === '4/5' ? 'selected' : ''}>بورتريه (4:5)</option>
+            <option value="1/1" ${st.card_ratio === '1/1' ? 'selected' : ''}>مربع (1:1)</option>
+          </select>
+        </div>
+      </div>
+
       <label>شريط الإعلان العلوي</label>
       <input id="sAnn" value="${esc(st.announce)}">
       <label class="chk"><input id="sShowAnn" type="checkbox" ${st.show_announce !== false ? 'checked' : ''}> إظهار شريط الإعلان العلوي</label>
@@ -1389,6 +1422,9 @@ function renderSettings() {
       </div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px">
         <label class="chk"><input id="sShowHero" type="checkbox" ${st.show_hero !== false ? 'checked' : ''}> إظهار البانر الترحيبي</label>
+        <label class="chk"><input id="sShowTrust" type="checkbox" ${st.show_trust_bar !== false ? 'checked' : ''}> إظهار شريط المزايا والثقة</label>
+        <label class="chk"><input id="sShowSearch" type="checkbox" ${st.show_search !== false ? 'checked' : ''}> إظهار شريط البحث والفرز</label>
+        <label class="chk"><input id="sShowFloatWa" type="checkbox" ${st.show_float_wa !== false ? 'checked' : ''}> زر واتساب العائم</label>
         <label class="chk"><input id="sShowSz" type="checkbox" ${st.show_size_chart !== false ? 'checked' : ''}> إظهار جدول القياسات</label>
         <label class="chk"><input id="sShowStk" type="checkbox" ${st.show_stock !== false ? 'checked' : ''}> إظهار الكمية المتبقية بالمخزن</label>
         <label class="chk"><input id="sHideSold" type="checkbox" ${st.hide_sold_out ? 'checked' : ''}> إخفاء المنتجات غير المتوفرة</label>
@@ -1523,11 +1559,17 @@ function renderSettings() {
           accent_2: $('sAcc2').value,
           grid_cols: $('sCols').value,
           card_radius: Number($('sRad').value),
+          font_style: $('sFont').value,
+          btn_style: $('sBtnStyle').value,
+          card_ratio: $('sCardRatio').value,
           announce: $('sAnn').value,
           show_announce: $('sShowAnn').checked,
           hero_title: $('sHeroT').value,
           hero_subtitle: $('sHeroS').value,
           show_hero: $('sShowHero').checked,
+          show_trust_bar: $('sShowTrust').checked,
+          show_search: $('sShowSearch').checked,
+          show_float_wa: $('sShowFloatWa').checked,
           show_slider: $('sShowSl').checked,
           slides: slidesData,
           show_size_chart: $('sShowSz').checked,
