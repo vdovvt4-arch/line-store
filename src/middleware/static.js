@@ -34,9 +34,14 @@ async function serveStatic(reqPath, res) {
       return res.end('Not Found');
     }
     const ext = path.extname(full).toLowerCase();
+    const fileName = path.basename(full);
+    const cacheControl = fileName === 'sw.js'
+      ? 'no-cache, no-store, must-revalidate'
+      : 'public, max-age=300';
     res.writeHead(200, {
       'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
       'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': cacheControl,
     });
     res.end(data);
   });
