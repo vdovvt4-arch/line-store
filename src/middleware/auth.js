@@ -41,28 +41,51 @@ async function createSession(password) {
   const valid = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
   if (!valid) throw new AppError(401, 'كلمة المرور غير صحيحة');
 
-  const payload = { exp: Date.now() + SESSION_TTL_MS, n: crypto.randomBytes(8).toString('hex') };
+  const payload = { role: 'admin', exp: Date.now() + SESSION_TTL_MS, n: crypto.randomBytes(8).toString('hex') };
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = signPayload(payloadB64);
   return `${payloadB64}.${sig}`;
 }
 
-function isAdmin(req) {
-  const token = extractToken(req);
-  if (!token || revokedTokens.has(token)) return false;
+function verifySignedToken(token) {
+  if (!token || revokedTokens.has(token)) return null;
   const dot = token.indexOf('.');
-  if (dot === -1) return false;
+  if (dot === -1) return null;
   const payloadB64 = token.slice(0, dot);
   const sig = token.slice(dot + 1);
   const expectedSig = signPayload(payloadB64);
-  if (sig.length !== expectedSig.length) return false;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return false;
+  if (sig.length !== expectedSig.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return null;
   try {
     const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
-    return Number(payload.exp) > Date.now();
+    if (Number(payload.exp) <= Date.now()) return null;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isAdmin(req) {
+  const payload = verifySignedToken(extractToken(req));
+  return Boolean(payload && payload.role !== 'customer');
+}
+
+function createCustomerToken(email) {
+  const payload = {
+    role: 'customer',
+    email: String(email || '').trim().toLowerCase(),
+    exp: Date.now() + 1000 * 60 * 60 * 24 * 30,
+    n: crypto.randomBytes(8).toString('hex'),
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${payloadB64}.${signPayload(payloadB64)}`;
+}
+
+function getCustomerFromReq(req) {
+  const raw = (req.headers['x-customer-token'] || extractToken(req) || '').trim();
+  const payload = verifySignedToken(raw);
+  if (!payload || payload.role !== 'customer' || !payload.email) return null;
+  return payload.email;
 }
 
 function requireAdmin(req) {
@@ -77,4 +100,7 @@ function revokeSession(req) {
   }
 }
 
-module.exports = { createSession, isAdmin, requireAdmin, revokeSession, setAdminPassword };
+module.exports = {
+  createSession, isAdmin, requireAdmin, revokeSession, setAdminPassword,
+  createCustomerToken, getCustomerFromReq,
+};
