@@ -169,6 +169,18 @@ const PG_SCHEMA = `
     key TEXT PRIMARY KEY,
     value TEXT
   );
+  CREATE TABLE IF NOT EXISTS customer_accounts (
+    email TEXT PRIMARY KEY,
+    google_sub TEXT DEFAULT '',
+    name TEXT DEFAULT '',
+    picture TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    governorate TEXT DEFAULT '',
+    address TEXT DEFAULT '',
+    is_vip BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT DEFAULT '';
 `;
 
 const SQLITE_SCHEMA = `
@@ -245,6 +257,18 @@ const SQLITE_SCHEMA = `
     key TEXT PRIMARY KEY,
     value TEXT
   );
+  CREATE TABLE IF NOT EXISTS customer_accounts (
+    email TEXT PRIMARY KEY,
+    google_sub TEXT DEFAULT '',
+    name TEXT DEFAULT '',
+    picture TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    governorate TEXT DEFAULT '',
+    address TEXT DEFAULT '',
+    is_vip BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT DEFAULT '';
 `;
 
 async function initDatabase() {
@@ -268,6 +292,7 @@ async function initDatabase() {
       "ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0",
       "ALTER TABLE orders ADD COLUMN cost_total REAL DEFAULT 0",
       "ALTER TABLE orders ADD COLUMN profit REAL DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN customer_email TEXT DEFAULT ''",
       "ALTER TABLE products ADD COLUMN sold_out INTEGER DEFAULT 0",
       "ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 10",
       "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 3",
