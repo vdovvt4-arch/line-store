@@ -3,12 +3,20 @@ const { ADMIN_PASSWORD, SESSION_TTL_MS } = require('../config');
 const db = require('../db/database');
 const { AppError } = require('../utils/http');
 
-const sessions = new Map(); // token -> expiry timestamp
+const revokedTokens = new Set();
+
+function getSigningSecret() {
+  return process.env.SESSION_SECRET || `${ADMIN_PASSWORD}:line-store-session-key`;
+}
+
+function signPayload(payloadB64) {
+  return crypto.createHmac('sha256', getSigningSecret()).update(payloadB64).digest('hex');
+}
 
 async function getActivePassword() {
   try {
     const row = await db.queryGet("SELECT value FROM settings WHERE key='admin_password'");
-    if (row && row.value) return row.value;
+    if (row && row.value) return String(row.value);
   } catch {}
   return ADMIN_PASSWORD;
 }
@@ -33,26 +41,28 @@ async function createSession(password) {
   const valid = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
   if (!valid) throw new AppError(401, 'كلمة المرور غير صحيحة');
 
-  const now = Date.now();
-  if (sessions.size > 100) {
-    for (const [t, exp] of sessions) {
-      if (exp <= now) sessions.delete(t);
-    }
-  }
-  const token = crypto.randomBytes(24).toString('hex');
-  sessions.set(token, now + SESSION_TTL_MS);
-  return token;
+  const payload = { exp: Date.now() + SESSION_TTL_MS, n: crypto.randomBytes(8).toString('hex') };
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = signPayload(payloadB64);
+  return `${payloadB64}.${sig}`;
 }
 
 function isAdmin(req) {
   const token = extractToken(req);
-  const exp = sessions.get(token);
-  if (!exp) return false;
-  if (exp <= Date.now()) {
-    sessions.delete(token);
+  if (!token || revokedTokens.has(token)) return false;
+  const dot = token.indexOf('.');
+  if (dot === -1) return false;
+  const payloadB64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expectedSig = signPayload(payloadB64);
+  if (sig.length !== expectedSig.length) return false;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    return Number(payload.exp) > Date.now();
+  } catch {
     return false;
   }
-  return true;
 }
 
 function requireAdmin(req) {
@@ -61,7 +71,10 @@ function requireAdmin(req) {
 
 function revokeSession(req) {
   const token = extractToken(req);
-  if (token) sessions.delete(token);
+  if (token) {
+    revokedTokens.add(token);
+    if (revokedTokens.size > 1000) revokedTokens.clear();
+  }
 }
 
 module.exports = { createSession, isAdmin, requireAdmin, revokeSession, setAdminPassword };
