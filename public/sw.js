@@ -1,4 +1,4 @@
-const CACHE_NAME = 'line-store-v3';
+const CACHE_NAME = 'line-store-v4';
 const PRECACHE_URLS = ['/store', '/store/line', '/store.html', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', event => {

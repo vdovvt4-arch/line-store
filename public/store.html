@@ -15,7 +15,7 @@
 :root{
   --bg:#14171f;--card:#1e232e;--card2:#262c3a;--inp:#161a23;--hdr:rgba(30,35,46,.95);
   --line:rgba(255,255,255,.09);--txt:#f4f6fa;--mut:#9aa4b8;--g1:#3250a3;--g2:#1f6feb;--amber:#f59e0b;--ok:#2ecc71;--warn:#f59e0b;--err:#ff6b6b;
-  --radius:16px;--btn-rad:10px;--img-ratio:1/1;--font:Cairo,system-ui,sans-serif;--shadow:0 8px 24px rgba(0,0,0,.28);
+  --radius:16px;--btn-rad:10px;--img-ratio:1/1;--img-fit:cover;--img-bg:var(--card2);--font:Cairo,system-ui,sans-serif;--shadow:0 8px 24px rgba(0,0,0,.28);
 }
 [data-theme="light"]{
   --bg:#f4f6f9;--card:#ffffff;--card2:#eef1f6;--inp:#f8f9fb;--hdr:rgba(255,255,255,.96);
@@ -90,8 +90,8 @@ main{flex:1;padding-bottom:34px}
 .grid.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:.2s;display:flex;flex-direction:column;box-shadow:var(--shadow);padding:10px}
 .card:hover{transform:translateY(-3px);border-color:var(--g1)}
-.img{aspect-ratio:var(--img-ratio);background:var(--card2);border-radius:12px;display:grid;place-items:center;color:var(--mut);position:relative;overflow:hidden}
-.img img{width:100%;height:100%;object-fit:cover;transition:transform .35s ease}
+.img{aspect-ratio:var(--img-ratio);background:var(--img-bg);border-radius:12px;display:grid;place-items:center;color:var(--mut);position:relative;overflow:hidden}
+.img img{width:100%;height:100%;object-fit:var(--img-fit);transition:transform .35s ease}
 .card:hover .img img{transform:scale(1.04)}
 .placeholder-art{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--mut);font-size:12px}
 .placeholder-art span:first-child{font-size:34px}
@@ -410,6 +410,30 @@ function applyStoreData(data) {
   document.documentElement.style.setProperty('--btn-rad', btnRadMap[st.btn_style] || '12px');
 
   document.documentElement.style.setProperty('--img-ratio', st.card_ratio || '1/1');
+  document.documentElement.style.setProperty('--img-fit', st.img_fit || 'cover');
+  const imgBgMap = {
+    default: 'var(--card2)',
+    white: '#ffffff',
+    soft: 'linear-gradient(135deg,color-mix(in srgb,var(--g1) 14%,var(--card2)),color-mix(in srgb,var(--g2) 14%,var(--card2)))',
+    transparent: 'transparent',
+  };
+  document.documentElement.style.setProperty('--img-bg', imgBgMap[st.img_bg] || 'var(--card2)');
+  document.body.style.backgroundColor = st.bg_color || '';
+  if (st.bg_image) {
+    document.body.style.backgroundImage = `linear-gradient(rgba(14,17,24,.72),rgba(14,17,24,.82)),url("${st.bg_image}")`;
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundAttachment = 'fixed';
+    document.body.style.backgroundPosition = 'center';
+  } else {
+    document.body.style.backgroundImage = '';
+  }
+  if (st.hero_image) {
+    $('heroBox').style.backgroundImage = `linear-gradient(135deg,rgba(14,17,24,.7),rgba(14,17,24,.55)),url("${st.hero_image}")`;
+    $('heroBox').style.backgroundSize = 'cover';
+    $('heroBox').style.backgroundPosition = 'center';
+  } else {
+    $('heroBox').style.backgroundImage = '';
+  }
 
   const toolsEl = document.querySelector('.tools');
   if (toolsEl) toolsEl.style.display = st.show_search !== false ? 'flex' : 'none';
@@ -1064,7 +1088,11 @@ function openOrder(fromCart) {
           ${govs.map(g => `<option value="${esc(g)}">${esc(g)} (${fmt(st.delivery[g])})</option>`).join('')}
         </select>
       </div>
-      <div><label>العنوان بالتفصيل</label><input id="oAddr" placeholder="المنطقة، الشارع، أقرب نقطة دالة"></div>
+      <div><label>المنطقة / القضاء</label><input id="oArea" placeholder="مثال: حي الحسين / المنصور"></div>
+    </div>
+    <div class="row">
+      <div><label>أقرب نقطة دالة</label><input id="oLandmark" placeholder="مثال: قرب مستشفى الحجة"></div>
+      <div><label>الشارع / رقم الدار (اختياري)</label><input id="oStreet" placeholder="مثال: شارع 14، دار 5"></div>
     </div>
 
     <label>كود الخصم (اختياري)</label>
@@ -1087,7 +1115,7 @@ function openOrder(fromCart) {
     if (custUser.phone && !$('oPhone').value) $('oPhone').value = custUser.phone;
     if (custUser.name && !$('oName').value) $('oName').value = custUser.name;
     if (custUser.governorate && !$('oGov').value) $('oGov').value = custUser.governorate;
-    if (custUser.address && !$('oAddr').value) $('oAddr').value = custUser.address;
+    if (custUser.address && !$('oArea').value) $('oArea').value = custUser.address;
   }
 
   function updateTotal() {
@@ -1152,7 +1180,7 @@ function openOrder(fromCart) {
           $('oGov').value = d.governorate;
           updateTotal();
         }
-        if (!$('oAddr').value) $('oAddr').value = d.address || '';
+        if (!$('oArea').value) $('oArea').value = d.address || '';
       }
     } catch {}
   };
@@ -1163,12 +1191,16 @@ function openOrder(fromCart) {
     btn.disabled = true;
     btn.textContent = 'جاري الإرسال...';
     try {
+      const area = $('oArea').value.trim();
+      const landmark = $('oLandmark').value.trim();
+      const street = $('oStreet').value.trim();
+      const fullAddress = [area, street, landmark ? 'قرب ' + landmark : ''].filter(Boolean).join('، ');
       const payload = {
         items: checkoutItems,
         phone: $('oPhone').value,
         name: $('oName').value,
         governorate: $('oGov').value,
-        address: $('oAddr').value,
+        address: fullAddress,
         coupon_code: appliedCoupon,
         note: $('oNote').value,
       };

@@ -215,6 +215,7 @@ let D = { products: [], orders: [], customers: [], coupons: [], expenses: [], se
 let curTab = 'overview';
 let orderFilter = 'all';
 let orderQuery = '';
+let prodQuery = '';
 let invFilter = 'all';
 let finPeriod = 'all';
 
@@ -696,6 +697,7 @@ function renderOrders() {
   $('content').innerHTML = `
     <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input id="oSearch" value="${esc(orderQuery)}" placeholder="بحث بالاسم، الهاتف، رقم الطلب..." style="flex:1;min-width:200px">
+      <button type="button" class="btn btn-sec btn-sm" id="printBatchOrd">🖨️ طباعة الكل (${list.length})</button>
       <button type="button" class="btn btn-sec btn-sm" id="expCsvOrd">📥 تصدير Excel</button>
     </div>
     <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 16px">
@@ -714,7 +716,8 @@ function renderOrders() {
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             ${o.status === 'new' ? `<button class="btn btn-sm" data-approve-print="${o.id}" type="button">✅ موافقة وطباعة وصل</button>` : ''}
-            <button class="btn btn-sec btn-sm" data-print-order="${o.id}" type="button">🖨️ وصل حراري</button>
+            <button class="btn btn-sec btn-sm" data-print-order="${o.id}" type="button">🖨️ وصل الطرد</button>
+            <button class="btn btn-sec btn-sm" data-copy-addr="${o.id}" type="button">📋 نسخ العنوان</button>
             <button class="btn btn-sec btn-sm" data-wa-order="${o.id}" type="button">💬 واتساب</button>
             <select data-st-id="${o.id}" style="width:auto">
               ${Object.entries(STATUS_AR).map(([k, v]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${v}</option>`).join('')}
@@ -748,6 +751,20 @@ function renderOrders() {
     b.onclick = () => { orderFilter = b.dataset.of; renderOrders(); };
   });
   $('expCsvOrd').onclick = exportOrdersCSV;
+  $('printBatchOrd').onclick = () => {
+    if (!list.length) return alert('لا توجد طلبات للطباعة');
+    $('printArea').innerHTML = list.map(o => `<div style="page-break-after:always">${buildThermalHTML(o)}</div>`).join('');
+    window.print();
+  };
+  $('content').querySelectorAll('[data-copy-addr]').forEach(b => {
+    b.onclick = () => {
+      const o = D.orders.find(x => x.id === Number(b.dataset.copyAddr));
+      if (!o) return;
+      const txt = `طلب #${o.id}\nالمستلم: ${o.customer_name}\nالهاتف: ${o.phone}\nالمحافظة: ${o.governorate}\nالعنوان: ${o.address}\nالمبلغ المطلوب: ${fmt(o.total)}`;
+      navigator.clipboard?.writeText(txt);
+      toast('تم نسخ بيانات التوصيل الكاملة');
+    };
+  });
   $('content').querySelectorAll('[data-wa-order]').forEach(b => {
     b.onclick = () => {
       const o = D.orders.find(x => x.id === Number(b.dataset.waOrder));
@@ -832,18 +849,24 @@ function renderOrders() {
 }
 
 function renderProducts() {
+  const list = D.products.filter(p =>
+    !prodQuery || (p.name + ' ' + p.category).toLowerCase().includes(prodQuery.toLowerCase())
+  );
   $('content').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <h2 style="margin:0">المنتجات (${D.products.length})</h2>
-      <button class="btn" id="newProdBtn" type="button">+ إضافة منتج جديد</button>
+      <h2 style="margin:0">المنتجات (${list.length} / ${D.products.length})</h2>
+      <div style="display:flex;gap:8px;flex:1;max-width:420px;min-width:220px">
+        <input id="pSearch" value="${esc(prodQuery)}" placeholder="بحث سريع في المنتجات...">
+        <button class="btn" id="newProdBtn" type="button" style="white-space:nowrap">+ إضافة منتج</button>
+      </div>
     </div>
     <div class="list-grid">
-      ${D.products.map(p => `
+      ${list.map(p => `
         <div class="p-card">
-          <div class="p-img">${p.images[0] ? `<img src="${p.images[0]}">` : '👔 بدون صورة'}</div>
+          <div class="p-img">${p.images[0] ? `<img src="${p.images[0]}" style="object-fit:contain">` : '👔 بدون صورة'}</div>
           <div style="padding:14px;display:flex;flex-direction:column;flex:1">
             <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-              <span class="pill ${p.published ? 'ok' : 'off'}">${p.published ? 'منشور' : 'مسودة'}</span>
+              <button type="button" class="pill ${p.published ? 'ok' : 'off'}" data-tog-pub="${p.id}" style="cursor:pointer" title="اضغط للتبديل">${p.published ? 'منشور ✓' : 'مسودة'}</button>
               <span class="pill ${p.sold_out ? 'off' : p.low_stock ? 'warn' : 'ok'}">
                 ${p.sold_out ? 'غير متوفر' : `المخزن: ${p.stock}`}
               </span>
@@ -863,6 +886,29 @@ function renderProducts() {
         </div>`).join('')}
     </div>`;
 
+  $('pSearch').oninput = e => {
+    const pos = e.target.selectionStart;
+    prodQuery = e.target.value;
+    renderProducts();
+    const inp = $('pSearch');
+    if (inp) { inp.focus(); try { inp.setSelectionRange(pos, pos); } catch {} }
+  };
+  $('content').querySelectorAll('[data-tog-pub]').forEach(b => {
+    b.onclick = async () => {
+      const orig = D.products.find(x => x.id === Number(b.dataset.togPub));
+      if (!orig) return;
+      try {
+        await api('/api/admin/products/' + orig.id, {
+          method: 'PUT',
+          body: JSON.stringify({ ...orig, published: !orig.published }),
+        });
+        toast(orig.published ? 'تم إخفاء المنتج' : 'تم نشر المنتج');
+        await init();
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
   $('newProdBtn').onclick = () => openProductForm();
   $('content').querySelectorAll('[data-edit-p]').forEach(b => {
     b.onclick = () => openProductForm(D.products.find(x => x.id === Number(b.dataset.editP)));
@@ -1120,6 +1166,7 @@ function compressImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
+    const keepAlpha = file.type === 'image/png' || file.type === 'image/webp';
     img.onload = () => {
       const max = 900;
       let w = img.width, h = img.height;
@@ -1129,9 +1176,16 @@ function compressImage(file) {
       }
       const cv = document.createElement('canvas');
       cv.width = w; cv.height = h;
-      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      const ctx = cv.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      resolve(cv.toDataURL('image/jpeg', 0.82));
+      if (keepAlpha) {
+        const webp = cv.toDataURL('image/webp', 0.88);
+        resolve(webp.startsWith('data:image/webp') ? webp : cv.toDataURL('image/png'));
+      } else {
+        resolve(cv.toDataURL('image/jpeg', 0.84));
+      }
     };
     img.onerror = reject;
     img.src = url;
@@ -1452,6 +1506,52 @@ function renderSettings() {
         </div>
       </div>
 
+      <div class="row3" style="margin-top:10px">
+        <div>
+          <label>عرض صور المنتجات</label>
+          <select id="sImgFit">
+            <option value="cover" ${(st.img_fit || 'cover') === 'cover' ? 'selected' : ''}>ملء الإطار بالكامل</option>
+            <option value="contain" ${st.img_fit === 'contain' ? 'selected' : ''}>احتواء كامل (ممتاز للصور الشفافة)</option>
+          </select>
+        </div>
+        <div>
+          <label>خلفية صور المنتجات</label>
+          <select id="sImgBg">
+            <option value="default" ${(st.img_bg || 'default') === 'default' ? 'selected' : ''}>الافتراضية</option>
+            <option value="white" ${st.img_bg === 'white' ? 'selected' : ''}>أبيض ناصع</option>
+            <option value="soft" ${st.img_bg === 'soft' ? 'selected' : ''}>تدرج ناعم</option>
+            <option value="transparent" ${st.img_bg === 'transparent' ? 'selected' : ''}>شفافة</option>
+          </select>
+        </div>
+        <div>
+          <label>لون خلفية الموقع المخصص</label>
+          <div style="display:flex;gap:6px">
+            <input id="sBgColor" type="color" value="${esc(st.bg_color || '#14171f')}" style="flex:1">
+            <button type="button" class="btn btn-sec btn-sm" id="clrBgColorBtn">افتراضي</button>
+          </div>
+          <input type="hidden" id="sBgColorActive" value="${esc(st.bg_color || '')}">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>صورة خلفية الموقع (اختياري)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="file" id="sBgImgFile" accept="image/*" style="flex:1">
+            <button type="button" class="btn btn-del btn-sm" id="rmBgImgBtn">مسح</button>
+          </div>
+          <div id="sBgImgPrev" style="margin-top:6px">${st.bg_image ? `<img src="${st.bg_image}" style="height:46px;border-radius:8px;border:1px solid var(--line)">` : '<span class="muted">بدون صورة خلفية</span>'}</div>
+        </div>
+        <div>
+          <label>صورة خلفية البانر الترحيبي (Hero)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="file" id="sHeroImgFile" accept="image/*" style="flex:1">
+            <button type="button" class="btn btn-del btn-sm" id="rmHeroImgBtn">مسح</button>
+          </div>
+          <div id="sHeroImgPrev" style="margin-top:6px">${st.hero_image ? `<img src="${st.hero_image}" style="height:46px;border-radius:8px;border:1px solid var(--line)">` : '<span class="muted">بدون صورة للبانر</span>'}</div>
+        </div>
+      </div>
+
       <label>شريط الإعلان العلوي</label>
       <input id="sAnn" value="${esc(st.announce)}">
       <label class="chk"><input id="sShowAnn" type="checkbox" ${st.show_announce !== false ? 'checked' : ''}> إظهار شريط الإعلان العلوي</label>
@@ -1560,6 +1660,21 @@ function renderSettings() {
     renderSlidesEditor();
   };
 
+  let bgImageData = st.bg_image || '';
+  let heroImageData = st.hero_image || '';
+  $('sBgColor').oninput = () => { $('sBgColorActive').value = $('sBgColor').value; };
+  $('clrBgColorBtn').onclick = () => { $('sBgColorActive').value = ''; toast('سيُستخدم اللون الافتراضي للثيم'); };
+  $('sBgImgFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { bgImageData = await compressImage(f); $('sBgImgPrev').innerHTML = `<img src="${bgImageData}" style="height:46px;border-radius:8px;border:1px solid var(--line)">`; } catch { toast('تعذر قراءة الصورة'); }
+  };
+  $('rmBgImgBtn').onclick = () => { bgImageData = ''; $('sBgImgPrev').innerHTML = '<span class="muted">بدون صورة خلفية</span>'; };
+  $('sHeroImgFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { heroImageData = await compressImage(f); $('sHeroImgPrev').innerHTML = `<img src="${heroImageData}" style="height:46px;border-radius:8px;border:1px solid var(--line)">`; } catch { toast('تعذر قراءة الصورة'); }
+  };
+  $('rmHeroImgBtn').onclick = () => { heroImageData = ''; $('sHeroImgPrev').innerHTML = '<span class="muted">بدون صورة للبانر</span>'; };
+
   const syncPreview = () => {
     document.documentElement.style.setProperty('--g1', $('sAcc1').value);
     document.documentElement.style.setProperty('--g2', $('sAcc2').value);
@@ -1613,6 +1728,11 @@ function renderSettings() {
           font_style: $('sFont').value,
           btn_style: $('sBtnStyle').value,
           card_ratio: $('sCardRatio').value,
+          img_fit: $('sImgFit').value,
+          img_bg: $('sImgBg').value,
+          bg_color: $('sBgColorActive').value,
+          bg_image: bgImageData,
+          hero_image: heroImageData,
           announce: $('sAnn').value,
           show_announce: $('sShowAnn').checked,
           hero_title: $('sHeroT').value,
@@ -1670,15 +1790,21 @@ function buildThermalHTML(o) {
   const dateStr = isNaN(dt) ? '' : dt.toLocaleString('ar-IQ');
   return `
     <div class="thermal-paper" dir="rtl">
+      <div style="text-align:center;font-weight:900;font-size:11px;background:#000;color:#fff;padding:3px 6px;border-radius:4px;margin-bottom:6px">📦 ملصق شحن وطرد — توصيل سريع</div>
       <h3>${esc(st.name || 'أزياء لاين الرجالية')}</h3>
-      <div style="text-align:center;font-size:11px">${esc(st.address || '')}</div>
-      <div style="text-align:center;font-size:11px">هاتف: ${esc(st.phone || '')}</div>
+      <div style="text-align:center;font-size:11px">${esc(st.address || '')} · هاتف المتجر: ${esc(st.phone || '')}</div>
       <hr class="thermal-hr">
-      <div style="display:flex;justify-content:space-between"><strong>وصل شراء #${o.id}</strong><span>${esc(dateStr)}</span></div>
-      <div><strong>الزبون:</strong> ${esc(o.customer_name)}</div>
-      <div><strong>الهاتف:</strong> ${esc(o.phone)}</div>
-      <div><strong>العنوان:</strong> ${esc(o.governorate)} - ${esc(o.address)}</div>
-      <hr class="thermal-hr">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="font-size:14px">طلب #${o.id}</strong>
+        <span style="font-size:10.5px">${esc(dateStr)}</span>
+      </div>
+      <div style="border:2px solid #000;border-radius:6px;padding:7px 8px;margin-bottom:8px;background:#f8f8f8">
+        <div style="font-size:10.5px;font-weight:700;border-bottom:1px solid #bbb;padding-bottom:2px;margin-bottom:4px">بيانات المستلم الكاملة:</div>
+        <div style="font-size:13.5px;font-weight:900">${esc(o.customer_name)}</div>
+        <div style="font-size:13px;font-weight:900;margin:2px 0" dir="ltr">${esc(o.phone)}</div>
+        <div style="font-size:12px;font-weight:800;margin-top:2px">📍 ${esc(o.governorate)}</div>
+        <div style="font-size:11.5px;line-height:1.45">${esc(o.address)}</div>
+      </div>
       <table class="thermal-tbl">
         <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th></tr></thead>
         <tbody>
@@ -1691,16 +1817,15 @@ function buildThermalHTML(o) {
         </tbody>
       </table>
       <hr class="thermal-hr">
-      <div style="display:flex;justify-content:space-between"><span>المجموع الفرعي:</span><span>${fmt(o.price)}</span></div>
-      ${o.discount_amount ? `<div style="display:flex;justify-content:space-between"><span>خصم (${esc(o.coupon_code)}):</span><span>-${fmt(o.discount_amount)}</span></div>` : ''}
-      <div style="display:flex;justify-content:space-between"><span>التوصيل:</span><span>${o.delivery_fee ? fmt(o.delivery_fee) : 'مجاني'}</span></div>
-      <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:900;margin-top:4px;border-top:1px solid #000;padding-top:4px">
-        <span>الإجمالي المطلوب:</span><span>${fmt(o.total)}</span>
+      <div style="display:flex;justify-content:space-between;font-size:11px"><span>المجموع الفرعي:</span><span>${fmt(o.price)}</span></div>
+      ${o.discount_amount ? `<div style="display:flex;justify-content:space-between;font-size:11px"><span>خصم (${esc(o.coupon_code)}):</span><span>-${fmt(o.discount_amount)}</span></div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-size:11px"><span>أجرة التوصيل:</span><span>${o.delivery_fee ? fmt(o.delivery_fee) : 'مجاني'}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:900;margin-top:6px;background:#000;color:#fff;padding:6px 8px;border-radius:4px">
+        <span>المطلوب عند الاستلام:</span><span>${fmt(o.total)}</span>
       </div>
-      ${o.note ? `<hr class="thermal-hr"><div><strong>ملاحظة:</strong> ${esc(o.note)}</div>` : ''}
+      ${o.note ? `<div style="margin-top:6px;padding:4px 6px;border:1px dashed #000;font-size:11px"><strong>ملاحظة:</strong> ${esc(o.note)}</div>` : ''}
       <hr class="thermal-hr">
-      <div style="text-align:center;font-size:11px">شكراً لتسوقكم من ${esc(st.name || 'أزياء لاين')}</div>
-      <div style="text-align:center;font-size:10px">مقدّم من شركة FRD</div>
+      <div style="text-align:center;font-size:11px">شكراً لتسوقكم من ${esc(st.name || 'أزياء لاين')} · مقدّم من FRD</div>
     </div>`;
 }
 
