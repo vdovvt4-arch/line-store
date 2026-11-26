@@ -202,9 +202,13 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:24px;line-heigh
 <div class="overlay" id="orderOv"><div class="modal" id="orderModal"></div></div>
 <div class="overlay" id="trackOv"><div class="modal" id="trackModal"></div></div>
 
+<script src="./config.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const API_ORIGIN = String(window.LINE_STORE_CONFIG?.API_ORIGIN || '').replace(/\/+$/, '');
+const API_CONNECTION_ERROR = 'تعذر الاتصال بخادم المتجر. اضبط API_ORIGIN في ملف config.js وتأكد من تشغيل الخادم.';
+const apiUrl = path => `${API_ORIGIN}${path}`;
 const SK = ['size', 'chest', 'waist', 'length', 'shoulder', 'sleeve'];
 const LBL = { size: 'القياس', chest: 'الصدر', waist: 'الخصر', length: 'الطول', shoulder: 'الكتف', sleeve: 'الكم' };
 const STATUS_AR = { new: 'جديد', confirmed: 'مؤكد', preparing: 'قيد التجهيز', tailoring: 'قيد التجهيز', shipping: 'قيد التوصيل', delivered: 'تم التوصيل', cancelled: 'ملغي' };
@@ -254,7 +258,13 @@ function saveCart() {
 
 async function load() {
   saveCart();
-  const r = await fetch('/api/store');
+  let r;
+  try {
+    r = await fetch(apiUrl('/api/store'));
+  } catch {
+    throw new Error(API_CONNECTION_ERROR);
+  }
+  if (!r.ok) throw new Error(API_CONNECTION_ERROR);
   S = await r.json();
   const st = S.settings;
 
@@ -697,7 +707,7 @@ $('productModal').onclick = e => {
     window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(txt)}`, '_blank', 'noopener');
   }
   if (e.target.id === 'shareProdBtn') {
-    const url = `${location.origin}/?product=${cur.id}`;
+    const url = `${location.origin}/store?product=${cur.id}`;
     if (navigator.share) {
       navigator.share({ title: cur.name, url }).catch(() => {});
     } else {
@@ -833,8 +843,9 @@ function openOrder(fromCart) {
     const code = $('oCoupon').value.trim();
     if (!code) return;
     try {
-      const r = await fetch(`/api/coupons/check?code=${encodeURIComponent(code)}&subtotal=${subtotal}`);
+      const r = await fetch(apiUrl(`/api/coupons/check?code=${encodeURIComponent(code)}&subtotal=${subtotal}`));
       const d = await r.json();
+      if (!r.ok) throw new Error(d.error || API_CONNECTION_ERROR);
       if (!d.valid) {
         appliedCoupon = '';
         couponDiscount = 0;
@@ -846,7 +857,7 @@ function openOrder(fromCart) {
       }
       updateTotal();
     } catch {
-      $('couponMsg').innerHTML = '<div class="err">تعذر التحقق من الكود</div>';
+      $('couponMsg').innerHTML = `<div class="err">${esc(API_CONNECTION_ERROR)}</div>`;
     }
   };
 
@@ -854,7 +865,7 @@ function openOrder(fromCart) {
     const ph = $('oPhone').value.trim();
     if (ph.length < 10) return;
     try {
-      const r = await fetch('/api/customer?phone=' + encodeURIComponent(ph));
+      const r = await fetch(apiUrl('/api/customer?phone=' + encodeURIComponent(ph)));
       const d = await r.json();
       if (d.found) {
         if (!$('oName').value) $('oName').value = d.name || '';
@@ -882,7 +893,7 @@ function openOrder(fromCart) {
         coupon_code: appliedCoupon,
         note: $('oNote').value,
       };
-      const r = await fetch('/api/orders', {
+      const r = await fetch(apiUrl('/api/orders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -910,7 +921,7 @@ function openOrder(fromCart) {
           <button class="btn" onclick="closeOv('orderOv')">العودة للمتجر</button>
         </div>`;
     } catch {
-      $('oErr').textContent = 'حدث خطأ في الاتصال بالخادم';
+      $('oErr').textContent = API_CONNECTION_ERROR;
       btn.disabled = false;
       btn.textContent = 'تأكيد وإرسال الطلب';
     }
@@ -934,7 +945,7 @@ $('trackBtn').onclick = () => {
     const resBox = $('trkRes');
     resBox.innerHTML = '<div class="muted">جاري البحث...</div>';
     try {
-      const r = await fetch('/api/orders/track?phone=' + encodeURIComponent(ph));
+      const r = await fetch(apiUrl('/api/orders/track?phone=' + encodeURIComponent(ph)));
       const d = await r.json();
       if (!r.ok) { resBox.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
       if (!d.orders.length) { resBox.innerHTML = '<div class="muted">لا توجد طلبات مسجلة لهذا الرقم.</div>'; return; }
@@ -950,7 +961,7 @@ $('trackBtn').onclick = () => {
           <div style="margin-top:6px;font-weight:700">الإجمالي: ${fmt(o.total)} — ${esc(o.governorate)}</div>
         </div>`).join('');
     } catch {
-      resBox.innerHTML = '<div class="err">تعذر الاتصال بالخادم</div>';
+      resBox.innerHTML = `<div class="err">${esc(API_CONNECTION_ERROR)}</div>`;
     }
   };
 };
@@ -959,7 +970,10 @@ for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv']) {
   $(id).onclick = e => { if (e.target === $(id)) closeOv(id); };
 }
 
-load();
+load().catch(error => {
+  $('grid').innerHTML = `<div class="err" role="alert">${esc(error.message || API_CONNECTION_ERROR)}</div>`;
+  $('empty').style.display = 'none';
+});
 </script>
 </body>
 </html>
