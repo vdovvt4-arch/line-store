@@ -1,44 +1,38 @@
 # متجر أزياء لاين الرجالية (LINE Store)
 
-متجر إلكتروني متكامل لمحل ملابس رجالية، مبني بهيكلة طبقية نظيفة بـ Node.js وSQLite المدمج بدون أي مكتبات خارجية.
+متجر إلكتروني ولوحة إدارة مبنيان على Node.js، مع Supabase Postgres لحفظ بيانات المنتجات والطلبات والعملاء والكوبونات والمصاريف والإعدادات، وSupabase Storage للصور.
 
 ## المتطلبات
-- **Node.js 22.13+** (لاستخدام `node:sqlite` المدمج).
+
+- Node.js 22.13 أو أحدث.
+- مشروع Supabase.
+
+## إعداد Supabase
+
+1. افتح SQL Editor في مشروع Supabase وشغّل `supabase/migrations/20260101000000_initial_schema.sql` مرة واحدة.
+2. انسخ `.env.example` إلى `.env` وأضف قيم `SUPABASE_ANON_KEY` و`SUPABASE_SERVICE_ROLE_KEY` و`ADMIN_PASSWORD` من إعداداتك المحلية. لا تحفظ `.env` أو مفاتيح Supabase في Git.
+3. يمكن تشغيل `supabase/seed.sql` اختيارياً لإضافة كوبون `LINE10`.
+
+لا ينفّذ الخادم migrations تلقائياً، ولا يستورد ملف SQLite قديم. لا تضع مفتاح `service_role` في أي ملف داخل `public/`.
 
 ## التشغيل المحلي
-1. (اختياري) انسخ `.env.example` إلى `.env` وعدّل كلمة المرور والمنفذ:
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-2. شغّل الخادم:
-   ```powershell
-   node server.js
-   ```
-3. افتح المتصفح:
-   - **المتجر:** `http://localhost:3000`
-   - **لوحة الإدارة:** `http://localhost:3000/admin` (كلمة المرور الافتراضية: `line2026`)
-   - **فحص صحة الخادم:** `http://localhost:3000/api/health`
 
-## النشر على GitHub والربط بسيرفر مجاني (Render.com)
-المشروع جاهز للنشر ومرفق معه ملف [`render.yaml`](render.yaml):
+```powershell
+Copy-Item .env.example .env
+node server.js
+```
 
-1. **رفع المشروع على GitHub:**
-   - أنشئ مستودعاً جديداً (New Repository) على حسابك في [GitHub](https://github.com/new).
-   - ارفع ملفات المشروع (أو استخدم Git):
-     ```powershell
-     git init
-     git add .
-     git commit -m "Initial commit - LINE Store"
-     git branch -M main
-     git remote add origin https://github.com/USERNAME/line-store.git
-     git push -u origin main
-     ```
-     *(لا ترفع ملفات `line.db` أو `.env` — وهي مستثناة تلقائياً في `.gitignore`).*
+- المتجر: `http://localhost:3000/store`
+- لوحة الإدارة: `http://localhost:3000/admin`
+- فحص صحة الخادم وقاعدة البيانات: `http://localhost:3000/api/health`
 
-2. **الربط بسيرفر مجاني على Render:**
-   - سجّل الدخول في [Render](https://render.com) بحساب GitHub.
-   - اختر **New +** ← **Blueprint** (أو **Web Service**)، واختر مستودع `line-store`.
-   - سيتعرف Render تلقائياً على `render.yaml` (`NODE_VERSION=22.14.0`، وأمر التشغيل `node server.js`، وفحص الصحة `/api/health`).
-   - أضف متغير البيئة `ADMIN_PASSWORD` بكلمة مرور قوية من لوحة Render.
+يجب ضبط `ADMIN_PASSWORD` إلى كلمة مرور قوية قبل تسجيل الدخول. لا توجد كلمة مرور افتراضية.
 
-> **ملاحظة مهمة للخطة المجانية:** في خطة Render المجانية لا يوجد قرص تخزين دائم، لذا أي بيانات تُحفظ في `line.db` قد تُعاد عند إعادة تشغيل/تحديث السيرفر. لحفظ البيانات بشكل دائم يمكن ربط Persistent Disk أو استخدام قاعدة بيانات خارجية لاحقاً.
+## النشر على Render وGitHub Pages
+
+1. انشر الخادم على Render باستخدام `render.yaml`. أضف `SUPABASE_ANON_KEY` و`SUPABASE_SERVICE_ROLE_KEY` كمتغيرات سرية في إعدادات الخدمة، واحتفظ بـ`ADMIN_PASSWORD` كسرّ. `SUPABASE_URL` و`CORS_ORIGINS` محددان في ملف Blueprint.
+2. بعد نشر الخادم، افتح `public/config.js` وضع أصل الخادم في `API_ORIGIN`، مثال: `https://your-service.onrender.com` (دون `/api`). لا تضع مفاتيح Supabase في هذا الملف.
+3. انشر ملفات `public/` إلى GitHub Pages. ملفات الواجهة لا تحتوي مفاتيح أو كلمات مرور.
+4. يسمح الخادم افتراضياً بأصل `https://vdovvt4-arch.github.io`. أضف أي أصل آخر بدقة إلى `CORS_ORIGINS` في Render، مفصولاً بفواصل، ولا تستخدم `*`.
+
+تظهر رسالة اتصال عربية في المتجر ولوحة الإدارة إذا لم يكن الخادم متاحاً أو لم يُضبط `API_ORIGIN`. يلزم تطبيق migration وإضافة مفاتيح الخادم قبل تشغيل الـAPI.

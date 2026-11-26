@@ -11,3 +11,11 @@ services:
         value: 22.14.0
       - key: ADMIN_PASSWORD
         generateValue: true
+      - key: SUPABASE_URL
+        value: https://diwdjdaikrlnsfrzthdx.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://vdovvt4-arch.github.io

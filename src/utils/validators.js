@@ -1,4 +1,5 @@
 const { MEASUREMENT_KEYS } = require('../config');
+const { isProjectMediaUrl } = require('../db/storage');
 
 function normPhone(v) {
   let s = String(v || '')
@@ -29,7 +30,7 @@ function cleanProduct(b) {
     .filter(Boolean)
     .slice(0, 20);
   const images = (Array.isArray(b.images) ? b.images : [])
-    .filter(i => typeof i === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(i) && i.length < 2e6)
+    .filter(isProjectMediaUrl)
     .slice(0, 6);
 
   const sizes = cleanSizes(b.sizes);
@@ -49,11 +50,11 @@ function cleanProduct(b) {
     discount_value: Math.max(0, Number(b.discount_value) || 0),
     stock,
     low_stock_threshold,
-    colors: JSON.stringify(colors),
-    sizes: JSON.stringify(sizes),
-    images: JSON.stringify(images),
-    published: b.published ? 1 : 0,
-    sold_out,
+    colors,
+    sizes,
+    images,
+    published: Boolean(b.published),
+    sold_out: Boolean(sold_out),
   };
 }
 

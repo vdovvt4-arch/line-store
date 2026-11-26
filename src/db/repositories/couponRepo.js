@@ -1,52 +1,48 @@
-const { db } = require('../database');
+const db = require('../supabase');
 
-function mapCoupon(r) {
-  return r ? { ...r, active: !!r.active } : null;
+function mapCoupon(row) {
+  return row ? { ...row, active: Boolean(row.active) } : null;
 }
 
-function findAll() {
-  return db.prepare('SELECT * FROM coupons ORDER BY id DESC').all().map(mapCoupon);
+async function findAll() {
+  return (await db.selectRows('coupons', { order: 'id.desc' })).map(mapCoupon);
 }
 
-function findByCode(code) {
-  const norm = String(code || '').trim().toUpperCase();
-  if (!norm) return null;
-  return mapCoupon(db.prepare('SELECT * FROM coupons WHERE UPPER(code)=?').get(norm));
+async function findByCode(code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!normalized) return null;
+  return mapCoupon(await db.selectOne('coupons', {
+    select: 'id,code,type,value,min_order,active',
+    code: `eq.${normalized}`,
+  }, { role: 'anon' }));
 }
 
 function calculateDiscount(coupon, subtotal) {
   if (!coupon || !coupon.active) return 0;
   if (subtotal < Number(coupon.min_order || 0)) return 0;
-  const val = Number(coupon.value || 0);
-  if (coupon.type === 'percent') return Math.min(subtotal, Math.round(subtotal * (Math.min(val, 100) / 100)));
-  if (coupon.type === 'fixed') return Math.min(subtotal, Math.max(0, val));
+  const value = Number(coupon.value || 0);
+  if (coupon.type === 'percent') return Math.min(subtotal, Math.round(subtotal * (Math.min(value, 100) / 100)));
+  if (coupon.type === 'fixed') return Math.min(subtotal, Math.max(0, value));
   return 0;
 }
 
-function create({ code, type, value, min_order, active }) {
-  const norm = String(code || '').trim().toUpperCase().slice(0, 30);
-  const t = ['percent', 'fixed'].includes(type) ? type : 'percent';
-  const v = Math.max(0, Number(value) || 0);
-  const min = Math.max(0, Number(min_order) || 0);
-  const act = active ? 1 : 0;
-
-  const r = db.prepare(`INSERT INTO coupons (code, type, value, min_order, active) VALUES (?, ?, ?, ?, ?)`)
-    .run(norm, t, v, min, act);
-  return mapCoupon(db.prepare('SELECT * FROM coupons WHERE id=?').get(Number(r.lastInsertRowid)));
+async function create({ code, type, value, min_order, active }) {
+  const normalized = String(code || '').trim().toUpperCase().slice(0, 30);
+  return mapCoupon(await db.insertOne('coupons', {
+    code: normalized,
+    type: ['percent', 'fixed'].includes(type) ? type : 'percent',
+    value: Math.max(0, Number(value) || 0),
+    min_order: Math.max(0, Number(min_order) || 0),
+    active: Boolean(active),
+  }));
 }
 
-function toggle(id, active) {
-  db.prepare('UPDATE coupons SET active=? WHERE id=?').run(active ? 1 : 0, id);
-  return mapCoupon(db.prepare('SELECT * FROM coupons WHERE id=?').get(id));
+async function toggle(id, active) {
+  return mapCoupon(await db.updateOne('coupons', { id: `eq.${id}` }, { active: Boolean(active) }));
 }
 
-function incrementUses(id) {
-  db.prepare('UPDATE coupons SET uses_count = uses_count + 1 WHERE id=?').run(id);
+async function remove(id) {
+  return (await db.deleteRows('coupons', { id: `eq.${id}` })) > 0;
 }
 
-function remove(id) {
-  const r = db.prepare('DELETE FROM coupons WHERE id=?').run(id);
-  return r.changes > 0;
-}
-
-module.exports = { findAll, findByCode, calculateDiscount, create, toggle, incrementUses, remove };
+module.exports = { findAll, findByCode, calculateDiscount, create, toggle, remove };
