@@ -1,38 +1,35 @@
 # متجر أزياء لاين الرجالية (LINE Store)
 
-متجر إلكتروني ولوحة إدارة مبنيان على Node.js، مع Supabase Postgres لحفظ بيانات المنتجات والطلبات والعملاء والكوبونات والمصاريف والإعدادات، وSupabase Storage للصور.
+متجر إلكتروني ولوحة إدارة يستخدمان Supabase Postgres لحفظ المنتجات والطلبات والعملاء والكوبونات والمصاريف والإعدادات، وSupabase Storage للصور. واجهات GitHub Pages تتصل بخادم API في Supabase Edge Functions؛ لا تحتاج الخدمة إلى Render أو بطاقة دفع.
 
-## المتطلبات
+## إعداد قاعدة البيانات
 
-- Node.js 22.13 أو أحدث.
-- مشروع Supabase.
-
-## إعداد Supabase
-
-1. افتح SQL Editor في مشروع Supabase وشغّل `supabase/migrations/20260101000000_initial_schema.sql` مرة واحدة.
-2. انسخ `.env.example` إلى `.env` وأضف قيم `SUPABASE_ANON_KEY` و`SUPABASE_SERVICE_ROLE_KEY` و`ADMIN_PASSWORD` من إعداداتك المحلية. لا تحفظ `.env` أو مفاتيح Supabase في Git.
+1. شغّل `supabase/migrations/20260101000000_initial_schema.sql` مرة واحدة إذا لم تكن قد طبقته.
+2. شغّل `supabase/migrations/20261126000000_admin_sessions.sql` لإضافة تخزين جلسات الإدارة الآمن اللازم للـEdge Function.
 3. يمكن تشغيل `supabase/seed.sql` اختيارياً لإضافة كوبون `LINE10`.
 
-لا ينفّذ الخادم migrations تلقائياً، ولا يستورد ملف SQLite قديم. لا تضع مفتاح `service_role` في أي ملف داخل `public/`.
+لا تنفّذ migrations تلقائياً من الخادم. لا تضع مفاتيح Supabase في Git أو أي ملف داخل `public/`.
 
-## التشغيل المحلي
+## تشغيل Edge Function
 
-```powershell
-Copy-Item .env.example .env
-node server.js
-```
+- يتطلب المشروع Supabase CLI وDeno للاختبار والتشغيل المحلي. الإعداد في `supabase/config.toml` يعطّل فحص JWT على مستوى البوابة لهذه الدالة فقط؛ الدالة نفسها تتحقق من جلسة الإدارة وتفرض CORS على أصل GitHub Pages المحدد.
+- ينشئ Supabase Edge Runtime متغير `SUPABASE_URL` ويمرر مفاتيح المشروع السرية عبر `SUPABASE_SECRET_KEYS`. تستخدم الدالة المفتاح الافتراضي على الخادم فقط، مع دعم الاسم القديم `SUPABASE_SERVICE_ROLE_KEY`. لا تنسخ `service_role` إلى الواجهة أو GitHub.
+- اضبط `ADMIN_PASSWORD` كسرّ للدالة من إعدادات Supabase بعد مراجعة الكود. لا تحفظه في المستودع. جلسات الإدارة تحفظ بصمة الرمز في جدول `admin_sessions` وتنتهي بعد 12 ساعة.
+- انشر الدالة بعد مراجعة التغييرات وتطبيق migration الجلسات:
 
-- المتجر: `http://localhost:3000/store`
-- لوحة الإدارة: `http://localhost:3000/admin`
-- فحص صحة الخادم وقاعدة البيانات: `http://localhost:3000/api/health`
+  ```powershell
+  supabase functions deploy store-api --project-ref diwdjdaikrlnsfrzthdx
+  ```
 
-يجب ضبط `ADMIN_PASSWORD` إلى كلمة مرور قوية قبل تسجيل الدخول. لا توجد كلمة مرور افتراضية.
+- `public/config.js` يوجّه المتجر ولوحة الإدارة إلى `https://diwdjdaikrlnsfrzthdx.supabase.co/functions/v1/store-api`. انشر ملفات `public/` إلى GitHub Pages بعد مراجعتها.
+- افحص جاهزية API من `https://diwdjdaikrlnsfrzthdx.supabase.co/functions/v1/store-api/api/health`.
 
-## النشر على Render وGitHub Pages
+للتشغيل المحلي، أنشئ `supabase/functions/.env` محلياً فقط وضع فيه `ADMIN_PASSWORD`، ثم استخدم `supabase functions serve store-api --env-file supabase/functions/.env`. اختبر بـ`deno test --allow-env supabase/functions/store-api/index_test.ts`. لا ترفع ملف `.env`.
 
-1. انشر الخادم على Render باستخدام `render.yaml`. أضف `SUPABASE_ANON_KEY` و`SUPABASE_SERVICE_ROLE_KEY` كمتغيرات سرية في إعدادات الخدمة، واحتفظ بـ`ADMIN_PASSWORD` كسرّ. `SUPABASE_URL` و`CORS_ORIGINS` محددان في ملف Blueprint.
-2. بعد نشر الخادم، افتح `public/config.js` وضع أصل الخادم في `API_ORIGIN`، مثال: `https://your-service.onrender.com` (دون `/api`). لا تضع مفاتيح Supabase في هذا الملف.
-3. انشر ملفات `public/` إلى GitHub Pages. ملفات الواجهة لا تحتوي مفاتيح أو كلمات مرور.
-4. يسمح الخادم افتراضياً بأصل `https://vdovvt4-arch.github.io`. أضف أي أصل آخر بدقة إلى `CORS_ORIGINS` في Render، مفصولاً بفواصل، ولا تستخدم `*`.
+## حدود الخطة المجانية
 
-تظهر رسالة اتصال عربية في المتجر ولوحة الإدارة إذا لم يكن الخادم متاحاً أو لم يُضبط `API_ORIGIN`. يلزم تطبيق migration وإضافة مفاتيح الخادم قبل تشغيل الـAPI.
+تنطبق حصص Supabase المجانية وحدود استخدام Edge Functions وStorage وقاعدة البيانات. قد تُوقَف المشاريع المجانية غير النشطة وفق سياسة Supabase الحالية؛ راقب الاستخدام وحالة المشروع من لوحة Supabase. لا توجد ضمانة تشغيل دائم على الخطة المجانية.
+
+## خادم Node.js الاختياري
+
+`server.js` و`render.yaml` ما زالا متاحين لمسار استضافة Node منفصل. هذا المسار ليس مطلوباً لتشغيل Edge Function، ويستخدم متغيرات `.env.example` عند تشغيله محلياً. لا تخلط أسرار خادم Node مع `public/config.js`.
