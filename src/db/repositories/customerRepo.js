@@ -1,28 +1,32 @@
-const { db } = require('../database');
+const db = require('../supabase');
 
-function findByPhone(phone) {
-  return db.prepare('SELECT phone, name, governorate, address FROM customers WHERE phone=?').get(phone) || null;
+async function findByPhone(phone) {
+  return db.selectOne('customers', {
+    select: 'phone,name,governorate,address',
+    phone: `eq.${phone}`,
+  });
 }
 
-function upsert({ phone, name, governorate, address }) {
-  db.prepare(`
-    INSERT INTO customers(phone, name, governorate, address) VALUES(?, ?, ?, ?)
-    ON CONFLICT(phone) DO UPDATE SET
-      name=excluded.name,
-      governorate=excluded.governorate,
-      address=excluded.address
-  `).run(phone, name, governorate, address);
+async function upsert(customer) {
+  return db.upsertOne('customers', customer, 'phone');
 }
 
-function findAllWithStats() {
-  return db.prepare(`
-    SELECT c.*, COUNT(o.id) AS orders_count,
-           COALESCE(SUM(CASE WHEN o.status != 'cancelled' THEN o.total ELSE 0 END), 0) AS total_spent
-    FROM customers c
-    LEFT JOIN orders o ON o.phone = c.phone
-    GROUP BY c.phone
-    ORDER BY c.created_at DESC
-  `).all();
+async function findAllWithStats() {
+  const [customers, orders] = await Promise.all([
+    db.selectRows('customers', { order: 'created_at.desc' }),
+    db.selectRows('orders', { select: 'phone,status,total' }),
+  ]);
+  const stats = new Map();
+  for (const order of orders) {
+    const current = stats.get(order.phone) || { orders_count: 0, total_spent: 0 };
+    current.orders_count += 1;
+    if (order.status !== 'cancelled') current.total_spent += Number(order.total) || 0;
+    stats.set(order.phone, current);
+  }
+  return customers.map(customer => ({
+    ...customer,
+    ...(stats.get(customer.phone) || { orders_count: 0, total_spent: 0 }),
+  }));
 }
 
 module.exports = { findByPhone, upsert, findAllWithStats };

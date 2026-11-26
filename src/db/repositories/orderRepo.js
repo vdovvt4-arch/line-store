@@ -1,76 +1,75 @@
-const { db } = require('../database');
-const { parseJsonSafe } = require('../../utils/http');
+const db = require('../supabase');
 
-function mapOrder(r) {
-  if (!r) return null;
-  const items = parseJsonSafe(r.items, []);
+function mapOrder(row) {
+  if (!row) return null;
+  const items = Array.isArray(row.items) ? row.items : [];
   return {
-    ...r,
-    cost_total: Number(r.cost_total || 0),
-    profit: Number(r.profit || 0),
-    measurements: parseJsonSafe(r.measurements, {}),
+    ...row,
+    cost_total: Number(row.cost_total || 0),
+    profit: Number(row.profit || 0),
+    measurements: row.measurements && typeof row.measurements === 'object' ? row.measurements : {},
     items: items.length ? items : [{
-      product_id: r.product_id,
-      product_name: r.product_name,
-      size: r.size,
-      color: r.color,
+      product_id: row.product_id,
+      product_name: row.product_name,
+      size: row.size,
+      color: row.color,
       qty: 1,
-      price: r.price,
+      price: row.price,
       cost_price: 0,
     }],
   };
 }
 
-function findAll() {
-  return db.prepare('SELECT * FROM orders ORDER BY id DESC').all().map(mapOrder);
+async function findAll() {
+  return (await db.selectRows('orders', { order: 'id.desc' })).map(mapOrder);
 }
 
-function findByPhone(phone) {
-  return db.prepare(`
-    SELECT id, product_name, size, color, items, governorate, coupon_code, discount_amount, price, delivery_fee, total, status, created_at
-    FROM orders
-    WHERE phone=?
-    ORDER BY id DESC
-    LIMIT 20
-  `).all(phone).map(mapOrder);
+async function findByPhone(phone) {
+  const rows = await db.selectRows('orders', {
+    select: 'id,product_id,product_name,size,color,items,governorate,coupon_code,discount_amount,price,delivery_fee,total,status,created_at',
+    phone: `eq.${phone}`,
+    order: 'id.desc',
+    limit: 20,
+  });
+  return rows.map(mapOrder);
 }
 
-function create(order) {
-  const r = db.prepare(`
-    INSERT INTO orders(product_id, product_name, size, color, items, customer_name, phone, governorate, address, measurements, sketch, note, coupon_code, discount_amount, price, cost_total, profit, delivery_fee, total)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    order.product_id,
-    order.product_name,
-    order.size,
-    order.color,
-    order.items,
-    order.customer_name,
-    order.phone,
-    order.governorate,
-    order.address,
-    order.measurements,
-    order.sketch,
-    order.note,
-    order.coupon_code || '',
-    Number(order.discount_amount || 0),
-    order.price,
-    Number(order.cost_total || 0),
-    Number(order.profit || 0),
-    order.delivery_fee,
-    order.total
-  );
-  return Number(r.lastInsertRowid);
+async function create(order) {
+  const id = await db.rpc('place_order', {
+    p_order: {
+      product_id: order.product_id,
+      product_name: order.product_name,
+      size: order.size,
+      color: order.color,
+      items: order.items,
+      customer_name: order.customer_name,
+      phone: order.phone,
+      governorate: order.governorate,
+      address: order.address,
+      measurements: order.measurements,
+      sketch: order.sketch,
+      note: order.note,
+      coupon_code: order.coupon_code,
+      discount_amount: order.discount_amount,
+      price: order.price,
+      cost_total: order.cost_total,
+      profit: order.profit,
+      delivery_fee: order.delivery_fee,
+      total: order.total,
+    },
+    p_customer: order.customer,
+    p_items: order.items_for_stock,
+    p_coupon_id: order.coupon_id,
+  });
+  return Number(id);
 }
 
-function updateStatus(id, status) {
-  const r = db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, id);
-  return r.changes > 0;
+async function updateStatus(id, status) {
+  return Boolean(await db.updateOne('orders', { id: `eq.${id}` }, { status }));
 }
 
-function remove(id) {
-  const r = db.prepare('DELETE FROM orders WHERE id=?').run(id);
-  return r.changes > 0;
+async function remove(id) {
+  return (await db.deleteRows('orders', { id: `eq.${id}` })) > 0;
 }
 
 module.exports = { findAll, findByPhone, create, updateStatus, remove };

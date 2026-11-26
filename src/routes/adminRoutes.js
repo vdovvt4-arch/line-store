@@ -9,6 +9,7 @@ const { createSession, requireAdmin, revokeSession } = require('../middleware/au
 const { rateLimit } = require('../middleware/rateLimit');
 const { AppError, json, readBody } = require('../utils/http');
 const { cleanProduct } = require('../utils/validators');
+const { uploadMedia, deleteMediaUrls } = require('../db/storage');
 
 async function handleAdminRoutes(req, res, method, pathname) {
   if (method === 'POST' && pathname === '/api/admin/login') {
@@ -30,29 +31,47 @@ async function handleAdminRoutes(req, res, method, pathname) {
   }
 
   if (method === 'GET' && pathname === '/api/admin/bootstrap') {
+    const [products, orders, customers, coupons, expenses, settings] = await Promise.all([
+      productRepo.findAll(),
+      orderRepo.findAll(),
+      customerRepo.findAllWithStats(),
+      couponRepo.findAll(),
+      expenseRepo.findAll(),
+      settingsRepo.get(),
+    ]);
     return json(res, 200, {
-      products: productRepo.findAll(),
-      orders: orderRepo.findAll(),
-      customers: customerRepo.findAllWithStats(),
-      coupons: couponRepo.findAll(),
-      expenses: expenseRepo.findAll(),
-      settings: settingsRepo.get(),
+      products,
+      orders,
+      customers,
+      coupons,
+      expenses,
+      settings,
       governorates: GOVERNORATES,
     });
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/media') {
+    const body = await readBody(req);
+    return json(res, 201, await uploadMedia(body.image, body.folder));
+  }
+
+  if (method === 'DELETE' && pathname === '/api/admin/media') {
+    const body = await readBody(req);
+    return json(res, 200, { deleted: await deleteMediaUrls(body.urls) });
   }
 
   if (method === 'POST' && pathname === '/api/admin/products') {
     const b = await readBody(req);
     const p = cleanProduct(b);
     if (!p.name) throw new AppError(400, 'اسم المنتج مطلوب');
-    return json(res, 201, productRepo.create(p));
+    return json(res, 201, await productRepo.create(p));
   }
 
   const invMatch = pathname.match(/^\/api\/admin\/products\/(\d+)\/inventory$/);
   if (invMatch && method === 'PATCH') {
     const id = Number(invMatch[1]);
     const b = await readBody(req);
-    const updated = productRepo.updateInventory(id, b);
+    const updated = await productRepo.updateInventory(id, b);
     if (!updated) throw new AppError(404, 'المنتج غير موجود');
     return json(res, 200, updated);
   }
@@ -64,12 +83,14 @@ async function handleAdminRoutes(req, res, method, pathname) {
       const b = await readBody(req);
       const p = cleanProduct(b);
       if (!p.name) throw new AppError(400, 'اسم المنتج مطلوب');
-      const updated = productRepo.update(id, p);
+      const updated = await productRepo.update(id, p);
       if (!updated) throw new AppError(404, 'المنتج غير موجود');
       return json(res, 200, updated);
     }
     if (method === 'DELETE') {
-      productRepo.remove(id);
+      const product = await productRepo.findById(id);
+      if (product) await deleteMediaUrls(product.images);
+      await productRepo.remove(id);
       return json(res, 200, { ok: true });
     }
   }
@@ -81,11 +102,11 @@ async function handleAdminRoutes(req, res, method, pathname) {
       const b = await readBody(req);
       const status = String(b.status || '');
       if (!ORDER_STATUSES.includes(status)) throw new AppError(400, 'حالة غير صالحة');
-      if (!orderRepo.updateStatus(id, status)) throw new AppError(404, 'الطلب غير موجود');
+      if (!(await orderRepo.updateStatus(id, status))) throw new AppError(404, 'الطلب غير موجود');
       return json(res, 200, { ok: true, status });
     }
     if (method === 'DELETE') {
-      orderRepo.remove(id);
+      await orderRepo.remove(id);
       return json(res, 200, { ok: true });
     }
   }
@@ -94,9 +115,12 @@ async function handleAdminRoutes(req, res, method, pathname) {
     const b = await readBody(req);
     if (!String(b.code || '').trim()) throw new AppError(400, 'كود الخصم مطلوب');
     try {
-      return json(res, 201, couponRepo.create(b));
-    } catch {
-      throw new AppError(400, 'كود الخصم مستخدم مسبقاً');
+      return json(res, 201, await couponRepo.create(b));
+    } catch (error) {
+      if (error.code === '23505' || error.status === 409) {
+        throw new AppError(400, 'كود الخصم مستخدم مسبقاً');
+      }
+      throw error;
     }
   }
 
@@ -105,10 +129,12 @@ async function handleAdminRoutes(req, res, method, pathname) {
     const id = Number(couponMatch[1]);
     if (method === 'PATCH') {
       const b = await readBody(req);
-      return json(res, 200, couponRepo.toggle(id, !!b.active));
+      const updated = await couponRepo.toggle(id, !!b.active);
+      if (!updated) throw new AppError(404, 'كود الخصم غير موجود');
+      return json(res, 200, updated);
     }
     if (method === 'DELETE') {
-      couponRepo.remove(id);
+      await couponRepo.remove(id);
       return json(res, 200, { ok: true });
     }
   }
@@ -116,18 +142,18 @@ async function handleAdminRoutes(req, res, method, pathname) {
   if (method === 'POST' && pathname === '/api/admin/expenses') {
     const b = await readBody(req);
     if (!String(b.title || '').trim()) throw new AppError(400, 'وصف المصروف مطلوب');
-    return json(res, 201, expenseRepo.create(b));
+    return json(res, 201, await expenseRepo.create(b));
   }
 
   const expMatch = pathname.match(/^\/api\/admin\/expenses\/(\d+)$/);
   if (expMatch && method === 'DELETE') {
-    expenseRepo.remove(Number(expMatch[1]));
+    await expenseRepo.remove(Number(expMatch[1]));
     return json(res, 200, { ok: true });
   }
 
   if (method === 'PUT' && pathname === '/api/admin/settings') {
     const b = await readBody(req);
-    return json(res, 200, settingsRepo.update(b));
+    return json(res, 200, await settingsRepo.update(b));
   }
 
   throw new AppError(404, 'مسار غير موجود');

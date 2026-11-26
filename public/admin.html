@@ -127,7 +127,7 @@ th,td{border-bottom:1px solid var(--line);padding:11px 8px;text-align:right;vert
       <div class="muted">متجر أزياء لاين الرجالية</div>
     </div>
   </div>
-  <input id="pw" type="password" placeholder="كلمة المرور (الافتراضية: line2026)">
+  <input id="pw" type="password" placeholder="أدخل كلمة مرور الإدارة">
   <div id="loginErr" style="color:var(--err);font-size:13px;margin-top:8px"></div>
   <button class="btn" id="loginBtn" style="width:100%;margin-top:14px" type="button">دخول</button>
 </div>
@@ -143,7 +143,7 @@ th,td{border-bottom:1px solid var(--line);padding:11px 8px;text-align:right;vert
     </div>
     <div id="sideNav"></div>
     <div class="side-foot">
-      <a class="btn btn-sec" href="/" target="_blank">معاينة المتجر</a>
+      <a class="btn btn-sec" href="./index.html" target="_blank">معاينة المتجر</a>
       <button class="btn btn-del" id="logoutSide" type="button">تسجيل الخروج</button>
     </div>
   </aside>
@@ -153,7 +153,7 @@ th,td{border-bottom:1px solid var(--line);padding:11px 8px;text-align:right;vert
       <h1 id="pageTitle">نظرة عامة</h1>
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-sec btn-sm" id="themeBtn" type="button">☀️ صباحي</button>
-        <a class="btn btn-sm" href="/" target="_blank">عرض المتجر</a>
+        <a class="btn btn-sm" href="./index.html" target="_blank">عرض المتجر</a>
         <button class="btn btn-sec btn-sm" id="logoutTop" type="button">خروج</button>
       </div>
     </header>
@@ -166,9 +166,13 @@ th,td{border-bottom:1px solid var(--line);padding:11px 8px;text-align:right;vert
 <div id="printArea"></div>
 <div class="toast" id="toast"></div>
 
+<script src="./config.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const API_ORIGIN = String(window.LINE_STORE_CONFIG?.API_ORIGIN || '').replace(/\/+$/, '');
+const API_CONNECTION_ERROR = 'تعذر الاتصال بخادم المتجر. اضبط API_ORIGIN في ملف config.js وتأكد من تشغيل الخادم.';
+const apiUrl = path => `${API_ORIGIN}${path}`;
 const STATUS_AR = { new: 'جديد', confirmed: 'مؤكد', preparing: 'قيد التجهيز', shipping: 'قيد التوصيل', delivered: 'تم التوصيل', cancelled: 'ملغي' };
 
 const NAV_GROUPS = [
@@ -239,15 +243,25 @@ async function api(url, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (TOKEN) headers.Authorization = 'Bearer ' + TOKEN;
   if (opts.body && !(opts.body instanceof FormData)) headers['Content-Type'] = 'application/json';
-  const r = await fetch(url, { ...opts, headers });
+  let r;
+  try {
+    r = await fetch(apiUrl(url), { ...opts, headers });
+  } catch {
+    toast(API_CONNECTION_ERROR);
+    throw new Error(API_CONNECTION_ERROR);
+  }
   if (r.status === 401) {
     TOKEN = '';
     localStorage.removeItem('line_admin_token');
     showLogin();
     throw new Error('unauthorized');
   }
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error || 'خطأ في الطلب');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const message = d.error || API_CONNECTION_ERROR;
+    toast(message);
+    throw new Error(message);
+  }
   return d;
 }
 
@@ -278,10 +292,68 @@ function renderNav() {
   $('pageTitle').textContent = curItem ? `${curItem.icon} ${curItem.label}` : 'لوحة التحكم';
 }
 
-async function init() {
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(660, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.14);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch (error) {
+    if (!TOKEN) return;
+    $('loginView').style.display = 'none';
+    $('appView').style.display = 'grid';
+    $('content').innerHTML = `<div class="card" role="alert"><div style="color:var(--err)">${esc(error.message || API_CONNECTION_ERROR)}</div><button class="btn" type="button" style="margin-top:12px" onclick="init()">إعادة المحاولة</button></div>`;
+  }
+}
+
+function exportOrdersCSV() {
+  const headers = ['رقم الطلب', 'الزبون', 'الهاتف', 'المحافظة', 'العنوان', 'المنتجات', 'سعر البيع', 'التكلفة', 'الخصم', 'ربح الطلب', 'التوصيل', 'الإجمالي', 'الحالة', 'التاريخ'];
+  const rows = D.orders.map(o => [
+    o.id,
+    o.customer_name,
+    o.phone,
+    o.governorate,
+    o.address,
+    o.items.map(i => `${i.product_name} x${i.qty} ${i.size || ''} ${i.color || ''}`).join(' | '),
+    o.price,
+    o.cost_total,
+    o.discount_amount || 0,
+    o.profit,
+    o.delivery_fee,
+    o.total,
+    STATUS_AR[o.status] || o.status,
+    o.created_at || '',
+  ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
+  const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `line-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  toast('تم تصدير ملف الطلبات والأرباح بنجاح');
+}
+
+let pollTimer = null;
+let knownOrderCount = null;
+
+async function init(silent = false) {
   if (!TOKEN) return showLogin();
   try {
-    D = await api('/api/admin/bootstrap');
+    const nextData = await api('/api/admin/bootstrap');
+    if (knownOrderCount !== null && nextData.orders.length > knownOrderCount) {
+      playChime();
+      toast('🔔 وصل طلب جديد!');
+    }
+    knownOrderCount = nextData.orders.length;
+    D = nextData;
     if (D.settings.accent_1) document.documentElement.style.setProperty('--g1', D.settings.accent_1);
     if (D.settings.accent_2) document.documentElement.style.setProperty('--g2', D.settings.accent_2);
     $('sideName').textContent = D.settings.name || 'أزياء لاين';
@@ -289,7 +361,9 @@ async function init() {
     $('loginView').style.display = 'none';
     $('appView').style.display = 'grid';
     renderNav();
-    renderTab();
+    if (!silent) renderTab();
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => init(true), 30000);
   } catch {}
 }
 
@@ -370,6 +444,17 @@ function renderOverview() {
       <div class="kpi"><div class="muted">طلبات جديدة / مخزن</div><div class="val">${newOrders} <span class="muted" style="font-size:14px">/ ${totalStock} قطعة</span></div></div>
     </div>
 
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-color:var(--g1)">
+      <div>
+        <div class="muted" style="font-size:12px">رابط المتجر المخصص للزبائن (انشره في صفحاتك):</div>
+        <strong dir="ltr" style="font-size:14px;color:var(--g1)">${esc(location.origin)}/store</strong>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" id="copyStoreBoxBtn" type="button">🔗 نسخ رابط المتجر</button>
+        <a class="btn btn-sec btn-sm" href="/store" target="_blank">فتح المتجر</a>
+      </div>
+    </div>
+
     <div class="quick-grid">
       <button class="btn" id="qAddProd" type="button">+ إضافة منتج</button>
       <button class="btn btn-sec" id="qGoFin" type="button">💰 الأرباح والمصاريف</button>
@@ -426,10 +511,12 @@ function renderOverview() {
   $('qAddProd').onclick = () => openProductForm();
   $('qGoFin').onclick = () => { curTab = 'finance'; renderNav(); renderTab(); };
   $('qGoInv').onclick = () => { curTab = 'inventory'; renderNav(); renderTab(); };
-  $('qCopyUrl').onclick = () => {
-    navigator.clipboard?.writeText(location.origin + '/');
-    toast('تم نسخ رابط المتجر');
+  const copyStoreUrl = () => {
+    navigator.clipboard?.writeText(location.origin + '/store');
+    toast('تم نسخ رابط المتجر للزبائن: ' + location.origin + '/store');
   };
+  $('qCopyUrl').onclick = copyStoreUrl;
+  $('copyStoreBoxBtn').onclick = copyStoreUrl;
 }
 
 function renderFinance() {
@@ -487,7 +574,10 @@ function renderFinance() {
     </div>
 
     <div class="card tbl-wrap">
-      <h2>تحليل الأرباح لكل عملية شراء (${D.orders.length})</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <h2 style="margin:0">تحليل الأرباح لكل عملية شراء (${D.orders.length})</h2>
+        <button type="button" class="btn btn-sec btn-sm" id="expCsvFin">📥 تصدير Excel (CSV)</button>
+      </div>
       <table>
         <thead><tr><th>الطلب</th><th>الزبون</th><th>سعر البيع</th><th>التكلفة</th><th>الخصم</th><th>ربح الشراء</th><th>الحالة</th></tr></thead>
         <tbody>
@@ -530,6 +620,8 @@ function renderFinance() {
     await init();
   };
 
+  $('expCsvFin').onclick = exportOrdersCSV;
+
   $('content').querySelectorAll('[data-del-exp]').forEach(b => {
     b.onclick = async () => {
       if (!confirm('حذف هذا المصروف؟')) return;
@@ -553,6 +645,7 @@ function renderOrders() {
         <option value="all">كل الحالات</option>
         ${Object.entries(STATUS_AR).map(([k, v]) => `<option value="${k}" ${orderFilter === k ? 'selected' : ''}>${v}</option>`).join('')}
       </select>
+      <button type="button" class="btn btn-sec btn-sm" id="expCsvOrd">📥 تصدير Excel</button>
     </div>
     ${list.map(o => `
       <div class="card">
@@ -564,6 +657,7 @@ function renderOrders() {
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             ${o.status === 'new' ? `<button class="btn btn-sm" data-approve-print="${o.id}" type="button">✅ موافقة وطباعة وصل</button>` : ''}
             <button class="btn btn-sec btn-sm" data-print-order="${o.id}" type="button">🖨️ وصل حراري</button>
+            <button class="btn btn-sec btn-sm" data-wa-order="${o.id}" type="button">💬 واتساب</button>
             <select data-st-id="${o.id}" style="width:auto">
               ${Object.entries(STATUS_AR).map(([k, v]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${v}</option>`).join('')}
             </select>
@@ -583,6 +677,17 @@ function renderOrders() {
 
   $('oSearch').oninput = e => { orderQuery = e.target.value; renderOrders(); };
   $('oFilter').onchange = e => { orderFilter = e.target.value; renderOrders(); };
+  $('expCsvOrd').onclick = exportOrdersCSV;
+  $('content').querySelectorAll('[data-wa-order]').forEach(b => {
+    b.onclick = () => {
+      const o = D.orders.find(x => x.id === Number(b.dataset.waOrder));
+      if (!o) return;
+      const waNum = String(o.phone || '').replace(/\D/g, '').replace(/^0/, '964');
+      const itemsTxt = o.items.map(i => `• ${i.product_name} × ${i.qty} ${i.size ? `(${i.size})` : ''}`).join('\n');
+      const msg = `مرحباً ${o.customer_name}،\nبخصوص طلبك رقم #${o.id} من ${D.settings.name || 'أزياء لاين'}:\n${itemsTxt}\nالحالة: ${STATUS_AR[o.status] || o.status}\nالإجمالي مع التوصيل: ${fmt(o.total)}`;
+      window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+    };
+  });
   $('content').querySelectorAll('[data-st-id]').forEach(sel => {
     sel.onchange = async () => {
       const id = sel.dataset.stId;
@@ -900,13 +1005,34 @@ function compressImage(file) {
       URL.revokeObjectURL(url);
       resolve(cv.toDataURL('image/jpeg', 0.82));
     };
-    img.onerror = reject;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('تعذر قراءة الصورة'));
+    };
     img.src = url;
+  });
+}
+
+async function uploadMediaFile(file, folder) {
+  const image = await compressImage(file);
+  return api('/api/admin/media', {
+    method: 'POST',
+    body: JSON.stringify({ folder, image }),
+  });
+}
+
+async function deleteMediaUrls(urls) {
+  if (!urls.length) return;
+  return api('/api/admin/media', {
+    method: 'DELETE',
+    body: JSON.stringify({ urls }),
   });
 }
 
 function openProductForm(p = null) {
   const images = [...(p?.images || [])];
+  const originalImages = [...images];
+  const pendingImages = [];
   const sizes = (p?.sizes?.length ? p.sizes : [{ size: 'M', chest: '', waist: '', length: '', shoulder: '', sleeve: '' }]).map(s => ({ ...s }));
 
   $('modalBody').innerHTML = `
@@ -945,7 +1071,7 @@ function openProductForm(p = null) {
     <button class="btn btn-sec" id="addSzBtn" type="button" style="margin-top:8px">+ إضافة قياس</button>
 
     <label>الصور (بحد أقصى 6 صور)</label>
-    <input id="pFiles" type="file" accept="image/*" multiple>
+    <input id="pFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple>
     <div class="thumbs" id="thumbs"></div>
 
     <div style="display:flex;gap:18px;margin:14px 0;flex-wrap:wrap">
@@ -956,10 +1082,22 @@ function openProductForm(p = null) {
     <button class="btn" id="saveProdBtn" type="button" style="width:100%">حفظ المنتج</button>`;
 
   function renderThumbs() {
-    $('thumbs').innerHTML = images.map((src, i) => `
-      <div class="thumb"><img src="${src}"><button type="button" data-rm-img="${i}">×</button></div>`).join('');
+    const thumbs = [
+      ...images.map(src => ({ src, pending: false })),
+      ...pendingImages.map(item => ({ src: item.preview, pending: true })),
+    ];
+    $('thumbs').innerHTML = thumbs.map(({ src }, i) => `
+      <div class="thumb"><img src="${esc(src)}"><button type="button" data-rm-img="${i}">×</button></div>`).join('');
     $('thumbs').querySelectorAll('[data-rm-img]').forEach(b => {
-      b.onclick = () => { images.splice(Number(b.dataset.rmImg), 1); renderThumbs(); };
+      b.onclick = () => {
+        const index = Number(b.dataset.rmImg);
+        if (index < images.length) images.splice(index, 1);
+        else {
+          const [removed] = pendingImages.splice(index - images.length, 1);
+          if (removed) URL.revokeObjectURL(removed.preview);
+        }
+        renderThumbs();
+      };
     });
   }
   function renderSizes() {
@@ -995,15 +1133,29 @@ function openProductForm(p = null) {
   $('addSzBtn').onclick = () => { sizes.push({ size: '', stock: 5, chest: '', waist: '', length: '', shoulder: '', sleeve: '' }); renderSizes(); };
   $('pFiles').onchange = async e => {
     for (const f of [...e.target.files]) {
-      if (images.length >= 6) break;
-      images.push(await compressImage(f));
+      if (images.length + pendingImages.length >= 6) {
+        alert('الحد الأقصى 6 صور');
+        break;
+      }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) {
+        alert('الصيغ المدعومة: JPG وPNG وWEBP');
+        continue;
+      }
+      pendingImages.push({ file: f, preview: URL.createObjectURL(f) });
     }
+    e.target.value = '';
     renderThumbs();
   };
 
   $('saveProdBtn').onclick = async () => {
     $('pErr').textContent = '';
+    const uploadedUrls = [];
     try {
+      for (const item of pendingImages) {
+        const uploaded = await uploadMediaFile(item.file, 'products');
+        uploadedUrls.push(uploaded.url);
+      }
+      const nextImages = [...images, ...uploadedUrls];
       const payload = {
         name: $('pName').value,
         category: $('pCat').value,
@@ -1016,7 +1168,7 @@ function openProductForm(p = null) {
         low_stock_threshold: Number($('pLow').value),
         colors: $('pColors').value.split(/[,،]/).map(s => s.trim()).filter(Boolean),
         sizes,
-        images,
+        images: nextImages,
         published: $('pPub').checked,
         sold_out: $('pSold').checked,
       };
@@ -1024,10 +1176,23 @@ function openProductForm(p = null) {
         method: p ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       });
+      let cleanupWarning = false;
+      try {
+        await deleteMediaUrls(originalImages.filter(url => !nextImages.includes(url)));
+      } catch (error) {
+        console.error('Unable to remove unused product images', error);
+        cleanupWarning = true;
+      }
+      pendingImages.forEach(item => URL.revokeObjectURL(item.preview));
       closeModal();
-      toast('تم حفظ المنتج');
+      toast(cleanupWarning ? 'تم حفظ المنتج، لكن تعذر حذف بعض الصور القديمة' : 'تم حفظ المنتج');
       await init();
     } catch (e) {
+      try {
+        await deleteMediaUrls(uploadedUrls);
+      } catch (cleanupError) {
+        console.error('Unable to remove uploaded images after save failure', cleanupError);
+      }
       $('pErr').textContent = e.message;
     }
   };
@@ -1164,10 +1329,12 @@ function renderSettings() {
         ${D.governorates.map(g => `
           <div><label>${esc(g)}</label><input type="number" data-gov="${esc(g)}" value="${Number(st.delivery?.[g] ?? 5000)}"></div>`).join('')}
       </div>
+      <div id="settingsErr" style="color:var(--err);font-size:13px;margin-top:12px"></div>
       <button class="btn" id="saveSetBtn" style="margin-top:16px;width:100%" type="button">حفظ كافة الإعدادات والتخصيصات</button>
     </div>`;
 
   const slidesData = (Array.isArray(st.slides) ? st.slides : []).map(s => ({ ...s }));
+  const originalSlideImages = slidesData.map(s => s.image).filter(Boolean);
   function renderSlidesEditor() {
     $('slidesWrap').innerHTML = slidesData.map((s, i) => `
       <div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--inp)">
@@ -1181,8 +1348,8 @@ function renderSettings() {
           <input placeholder="شارة (مثال: خصم 20%)" data-sli="${i}" data-slk="badge" value="${esc(s.badge || '')}">
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
-          <input type="file" accept="image/*" data-sl-file="${i}" style="width:auto;flex:1">
-          ${s.image ? `<img src="${s.image}" style="height:44px;border-radius:8px;border:1px solid var(--line)">` : '<span class="muted">خلفية متدرجة تلقائية (أو ارفع صورة)</span>'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" data-sl-file="${i}" style="width:auto;flex:1">
+          ${s._preview || s.image ? `<img src="${esc(s._preview || s.image)}" alt="معاينة صورة العرض" style="height:44px;border-radius:8px;border:1px solid var(--line)">` : '<span class="muted">خلفية متدرجة تلقائية (أو ارفع صورة)</span>'}
         </div>
       </div>`).join('') || '<div class="muted">لا توجد شرائح عروض حالياً.</div>';
 
@@ -1190,13 +1357,25 @@ function renderSettings() {
       inp.oninput = () => { slidesData[Number(inp.dataset.sli)][inp.dataset.slk] = inp.value; };
     });
     $('slidesWrap').querySelectorAll('[data-rm-sl]').forEach(b => {
-      b.onclick = () => { slidesData.splice(Number(b.dataset.rmSl), 1); renderSlidesEditor(); };
+      b.onclick = () => {
+        const [removed] = slidesData.splice(Number(b.dataset.rmSl), 1);
+        if (removed?._preview) URL.revokeObjectURL(removed._preview);
+        renderSlidesEditor();
+      };
     });
     $('slidesWrap').querySelectorAll('[data-sl-file]').forEach(inp => {
       inp.onchange = async e => {
         const f = e.target.files[0];
         if (!f) return;
-        slidesData[Number(inp.dataset.slFile)].image = await compressImage(f);
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) {
+          alert('الصيغ المدعومة: JPG وPNG وWEBP');
+          e.target.value = '';
+          return;
+        }
+        const slide = slidesData[Number(inp.dataset.slFile)];
+        if (slide._preview) URL.revokeObjectURL(slide._preview);
+        slide._file = f;
+        slide._preview = URL.createObjectURL(f);
         renderSlidesEditor();
       };
     });
@@ -1229,13 +1408,34 @@ function renderSettings() {
   });
 
   $('saveSetBtn').onclick = async () => {
-    const delivery = {};
-    $('content').querySelectorAll('[data-gov]').forEach(inp => {
-      delivery[inp.dataset.gov] = Number(inp.value) || 0;
-    });
-    await api('/api/admin/settings', {
-      method: 'PUT',
-      body: JSON.stringify({
+    $('settingsErr').textContent = '';
+    const btn = $('saveSetBtn');
+    const uploadedUrls = [];
+    btn.disabled = true;
+    try {
+      const slides = [];
+      for (const slide of slidesData) {
+        let image = slide.image || '';
+        if (slide._file) {
+          const uploaded = await uploadMediaFile(slide._file, 'promos');
+          image = uploaded.url;
+          uploadedUrls.push(image);
+        }
+        slides.push({
+          title: slide.title || '',
+          subtitle: slide.subtitle || '',
+          badge: slide.badge || '',
+          image,
+        });
+      }
+
+      const delivery = {};
+      $('content').querySelectorAll('[data-gov]').forEach(inp => {
+        delivery[inp.dataset.gov] = Number(inp.value) || 0;
+      });
+      await api('/api/admin/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
         name: $('sName').value,
         logo_text: $('sLogo').value,
         tagline: $('sTag').value,
@@ -1258,7 +1458,7 @@ function renderSettings() {
         hero_subtitle: $('sHeroS').value,
         show_hero: $('sShowHero').checked,
         show_slider: $('sShowSl').checked,
-        slides: slidesData,
+        slides,
         show_size_chart: $('sShowSz').checked,
         show_stock: $('sShowStk').checked,
         hide_sold_out: $('sHideSold').checked,
@@ -1267,10 +1467,34 @@ function renderSettings() {
         min_order_amount: Number($('sMinOrd').value),
         free_delivery_over: Number($('sFreeDel').value),
         delivery,
-      })
-    });
-    toast('تم حفظ التخصيصات والإعدادات بنجاح');
-    await init();
+        }),
+      });
+
+      let cleanupWarning = false;
+      try {
+        const currentImages = slides.map(slide => slide.image).filter(Boolean);
+        await deleteMediaUrls(originalSlideImages.filter(url => !currentImages.includes(url)));
+      } catch (error) {
+        console.error('Unable to remove unused promotion images', error);
+        cleanupWarning = true;
+      }
+      slidesData.forEach(slide => {
+        if (slide._preview) URL.revokeObjectURL(slide._preview);
+      });
+      toast(cleanupWarning
+        ? 'تم حفظ الإعدادات، لكن تعذر حذف بعض الصور القديمة'
+        : 'تم حفظ التخصيصات والإعدادات بنجاح');
+      await init();
+    } catch (error) {
+      try {
+        await deleteMediaUrls(uploadedUrls);
+      } catch (cleanupError) {
+        console.error('Unable to remove uploaded promotion images after save failure', cleanupError);
+      }
+      $('settingsErr').textContent = error.message;
+    } finally {
+      btn.disabled = false;
+    }
   };
 }
 

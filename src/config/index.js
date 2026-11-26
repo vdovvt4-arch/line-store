@@ -79,8 +79,7 @@ const MIME_TYPES = {
 
 module.exports = {
   PORT: Number(process.env.PORT) || 3000,
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'line2026',
-  DB_PATH: path.resolve(ROOT_DIR, process.env.DB_PATH || 'line.db'),
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
   PUBLIC_DIR: path.join(ROOT_DIR, 'public'),
   SESSION_TTL_MS: Number(process.env.SESSION_TTL_MS) || 1000 * 60 * 60 * 12,
   MAX_BODY_BYTES: 15 * 1024 * 1024,

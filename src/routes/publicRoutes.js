@@ -8,13 +8,9 @@ const { AppError, json, readBody } = require('../utils/http');
 const { normPhone } = require('../utils/validators');
 
 async function handlePublicRoutes(req, res, method, pathname, url) {
-  if (method === 'GET' && pathname === '/api/health') {
-    return json(res, 200, { ok: true, uptime: Math.round(process.uptime()) });
-  }
-
   if (method === 'GET' && pathname === '/api/store') {
-    const settings = settingsRepo.get();
-    let products = productRepo.findPublished();
+    const settings = await settingsRepo.get();
+    let products = await productRepo.findPublished();
     if (settings.hide_sold_out) {
       products = products.filter(p => !p.sold_out);
     }
@@ -24,20 +20,20 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
   if (method === 'GET' && pathname === '/api/customer') {
     const phone = normPhone(url.searchParams.get('phone'));
     if (!phone) return json(res, 200, { found: false });
-    const customer = customerRepo.findByPhone(phone);
+    const customer = await customerRepo.findByPhone(phone);
     return json(res, 200, customer ? { found: true, ...customer } : { found: false });
   }
 
   if (method === 'GET' && pathname === '/api/orders/track') {
     const phone = normPhone(url.searchParams.get('phone'));
     if (!phone) throw new AppError(400, 'أدخل رقم هاتف صحيح (07xxxxxxxxx)');
-    return json(res, 200, { orders: orderRepo.findByPhone(phone) });
+    return json(res, 200, { orders: await orderRepo.findByPhone(phone) });
   }
 
   if (method === 'GET' && pathname === '/api/coupons/check') {
     const code = url.searchParams.get('code');
     const subtotal = Math.max(0, Number(url.searchParams.get('subtotal')) || 0);
-    const coupon = couponRepo.findByCode(code);
+    const coupon = await couponRepo.findByCode(code);
     if (!coupon || !coupon.active) {
       return json(res, 200, { valid: false, message: 'كود الخصم غير صالح أو متوقف' });
     }
@@ -67,7 +63,7 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
     const name = String(b.name || '').trim();
     if (name.length < 2) throw new AppError(400, 'الرجاء كتابة الاسم');
 
-    const settings = settingsRepo.get();
+    const settings = await settingsRepo.get();
     const gov = String(b.governorate || '');
     if (!(gov in settings.delivery)) throw new AppError(400, 'اختر المحافظة');
 
@@ -83,7 +79,7 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
     let costTotal = 0;
 
     for (const item of rawItems) {
-      const product = productRepo.findPublishedById(Number(item.product_id));
+      const product = await productRepo.findPublishedById(Number(item.product_id));
       if (!product) throw new AppError(404, 'أحد المنتجات غير متوفر حالياً');
       if (product.sold_out || product.stock <= 0) {
         throw new AppError(400, `المنتج غير متوفر حالياً: ${product.name}`);
@@ -128,7 +124,7 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
     let discountAmount = 0;
     let usedCouponId = null;
     if (b.coupon_code) {
-      const coupon = couponRepo.findByCode(b.coupon_code);
+      const coupon = await couponRepo.findByCode(b.coupon_code);
       if (!coupon || !coupon.active) throw new AppError(400, 'كود الخصم غير صالح أو متوقف');
       if (subtotal < Number(coupon.min_order || 0)) {
         throw new AppError(400, `الحد الأدنى لاستخدام الكود هو ${coupon.min_order} ${settings.currency}`);
@@ -151,19 +147,17 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
       ? `${first.product_name} (+${verifiedItems.length - 1} منتجات)`
       : first.product_name;
 
-    customerRepo.upsert({ phone, name, governorate: gov, address });
-
-    const id = orderRepo.create({
+    const id = await orderRepo.create({
       product_id: first.product_id,
       product_name: summaryName,
       size: first.size,
       color: first.color,
-      items: JSON.stringify(verifiedItems),
+      items: verifiedItems,
       customer_name: name,
       phone,
       governorate: gov,
       address,
-      measurements: '{}',
+      measurements: {},
       sketch: '',
       note: String(b.note || '').trim().slice(0, 500),
       coupon_code: couponCode,
@@ -173,12 +167,10 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
       profit: orderProfit,
       delivery_fee: fee,
       total,
+      coupon_id: usedCouponId,
+      customer: { phone, name, governorate: gov, address },
+      items_for_stock: verifiedItems.map(({ product_id, size, qty }) => ({ product_id, size, qty })),
     });
-
-    for (const item of verifiedItems) {
-      productRepo.decrementStock(item.product_id, item.qty, item.size);
-    }
-    if (usedCouponId) couponRepo.incrementUses(usedCouponId);
 
     return json(res, 201, {
       id,

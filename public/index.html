@@ -101,6 +101,9 @@ td,th{border:1px solid var(--line);padding:6px;text-align:center}
 .empty{text-align:center;color:var(--mut);padding:60px 0}
 footer{text-align:center;color:var(--mut);font-size:13px;padding:24px;line-height:1.9;border-top:1px solid var(--line)}
 .soldtag{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.82);color:#fff;padding:4px 10px;border-radius:99px;font-size:12px;z-index:1}
+.fav-btn{position:absolute;top:10px;left:10px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;cursor:pointer;z-index:2;font-size:15px;transition:.15s}
+.fav-btn:hover{transform:scale(1.08)}
+.fav-btn.on{background:#e11d48;border-color:#e11d48}
 .tools{display:flex;gap:8px;margin-top:10px;align-items:center}
 .search-wrap{position:relative;flex:1;min-width:0}
 .search-wrap input{padding-inline:36px 34px}
@@ -199,9 +202,13 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:24px;line-heigh
 <div class="overlay" id="orderOv"><div class="modal" id="orderModal"></div></div>
 <div class="overlay" id="trackOv"><div class="modal" id="trackModal"></div></div>
 
+<script src="./config.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const API_ORIGIN = String(window.LINE_STORE_CONFIG?.API_ORIGIN || '').replace(/\/+$/, '');
+const API_CONNECTION_ERROR = 'تعذر الاتصال بخادم المتجر. اضبط API_ORIGIN في ملف config.js وتأكد من تشغيل الخادم.';
+const apiUrl = path => `${API_ORIGIN}${path}`;
 const SK = ['size', 'chest', 'waist', 'length', 'shoulder', 'sleeve'];
 const LBL = { size: 'القياس', chest: 'الصدر', waist: 'الخصر', length: 'الطول', shoulder: 'الكتف', sleeve: 'الكم' };
 const STATUS_AR = { new: 'جديد', confirmed: 'مؤكد', preparing: 'قيد التجهيز', tailoring: 'قيد التجهيز', shipping: 'قيد التوصيل', delivered: 'تم التوصيل', cancelled: 'ملغي' };
@@ -209,7 +216,24 @@ const STATUS_AR = { new: 'جديد', confirmed: 'مؤكد', preparing: 'قيد �
 let S = { settings: {}, products: [] };
 let cat = 'الكل', cur = null, selSize = '', selColor = '', q = '', sortBy = 'new';
 let cart = JSON.parse(localStorage.getItem('line_cart') || '[]');
+let favs = JSON.parse(localStorage.getItem('line_favs') || '[]');
 let checkoutItems = [];
+
+function toggleFav(id) {
+  const num = Number(id);
+  const idx = favs.indexOf(num);
+  if (idx > -1) favs.splice(idx, 1);
+  else favs.push(num);
+  localStorage.setItem('line_favs', JSON.stringify(favs));
+  renderCats();
+  renderGrid();
+
+  const pid = Number(new URLSearchParams(location.search).get('product'));
+  if (pid) {
+    const target = S.products.find(x => x.id === pid);
+    if (target) openProduct(target);
+  }
+}
 
 const fmt = n => Number(n || 0).toLocaleString('en') + ' ' + (S.settings.currency || 'د.ع');
 window.closeOv = id => $(id).classList.remove('open');
@@ -234,7 +258,13 @@ function saveCart() {
 
 async function load() {
   saveCart();
-  const r = await fetch('/api/store');
+  let r;
+  try {
+    r = await fetch(apiUrl('/api/store'));
+  } catch {
+    throw new Error(API_CONNECTION_ERROR);
+  }
+  if (!r.ok) throw new Error(API_CONNECTION_ERROR);
   S = await r.json();
   const st = S.settings;
 
@@ -299,6 +329,12 @@ async function load() {
 
   renderCats();
   renderGrid();
+
+  const pid = Number(new URLSearchParams(location.search).get('product'));
+  if (pid) {
+    const target = S.products.find(x => x.id === pid);
+    if (target) openProduct(target);
+  }
 }
 
 let slideIdx = 0, slideTimer = null;
@@ -339,8 +375,9 @@ function renderSlider(slides) {
 }
 
 function renderCats() {
-  const cats = ['الكل', ...new Set(S.products.map(p => p.category).filter(Boolean))];
-  $('cats').innerHTML = cats.map(c => `<button class="chip ${c === cat ? 'on' : ''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+  const favLabel = `❤️ المفضلة${favs.length ? ` (${favs.length})` : ''}`;
+  const cats = ['الكل', '❤️ المفضلة', ...new Set(S.products.map(p => p.category).filter(Boolean))];
+  $('cats').innerHTML = cats.map(c => `<button class="chip ${c === cat ? 'on' : ''}" data-c="${esc(c)}">${esc(c === '❤️ المفضلة' ? favLabel : c)}</button>`).join('');
 }
 
 $('cats').onclick = e => {
@@ -349,6 +386,12 @@ $('cats').onclick = e => {
   cat = b.dataset.c;
   renderCats();
   renderGrid();
+
+  const pid = Number(new URLSearchParams(location.search).get('product'));
+  if (pid) {
+    const target = S.products.find(x => x.id === pid);
+    if (target) openProduct(target);
+  }
 };
 
 const SYNONYMS = {
@@ -512,7 +555,7 @@ function stockBadgeHTML(p) {
 
 function renderGrid() {
   let list = S.products
-    .filter(p => cat === 'الكل' || p.category === cat)
+    .filter(p => cat === 'الكل' || (cat === '❤️ المفضلة' ? favs.includes(p.id) : p.category === cat))
     .map(p => ({ p, s: q ? scoreProduct(p, q) : 1 }))
     .filter(x => x.s > 0);
 
@@ -529,6 +572,7 @@ function renderGrid() {
     return `
       <div class="card" data-id="${p.id}">
         <div class="img">
+          <button type="button" class="fav-btn ${favs.includes(p.id) ? 'on' : ''}" data-fav="${p.id}" title="إضافة للمفضلة">${favs.includes(p.id) ? '♥' : '♡'}</button>
           ${unavail ? '<span class="soldtag">غير متوفر</span>' : p.low_stock ? '<span class="soldtag" style="background:linear-gradient(90deg,#f59e0b,#ef4444)">🔥 سارع بالشراء</span>' : ''}
           ${p.images[0] ? `<img src="${p.images[0]}" alt="${esc(p.name)}">` : `<div class="placeholder-art"><span>👔</span><span>${esc(p.category || 'ملابس رجالية')}</span></div>`}
         </div>
@@ -544,6 +588,12 @@ function renderGrid() {
 }
 
 $('grid').onclick = e => {
+  const fb = e.target.closest('[data-fav]');
+  if (fb) {
+    e.stopPropagation();
+    toggleFav(fb.dataset.fav);
+    return;
+  }
   const c = e.target.closest('.card');
   if (!c) return;
   const prod = S.products.find(x => x.id === Number(c.dataset.id));
@@ -588,6 +638,10 @@ function openProduct(p) {
     <div class="act-row" style="${S.settings.enable_cart === false ? 'grid-template-columns:1fr' : ''}">
       ${S.settings.enable_cart !== false ? `<button class="btn btn-sec" type="button" id="addCartBtn" ${unavail ? 'disabled' : ''}>أضف إلى السلة</button>` : ''}
       <button class="btn" type="button" id="bookBtn" ${unavail ? 'disabled' : ''}>${unavail ? 'غير متوفر حالياً' : 'اطلب الآن'}</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      ${S.settings.whatsapp ? `<button class="chip" type="button" id="waOrderBtn" style="flex:1;justify-content:center" ${unavail ? 'disabled' : ''}>💬 طلب سريع عبر واتساب</button>` : ''}
+      <button class="chip" type="button" id="shareProdBtn" style="flex:1;justify-content:center">🔗 مشاركة المنتج</button>
     </div>`;
   updateSizeHint();
   $('productOv').classList.add('open');
@@ -645,6 +699,22 @@ $('productModal').onclick = e => {
     checkoutItems = [{ product_id: cur.id, product_name: cur.name, size: selSize, color: selColor, price: cur.final_price, qty: 1 }];
     closeOv('productOv');
     openOrder(false);
+  }
+  if (e.target.id === 'waOrderBtn') {
+    if (!validateSelection()) return;
+    const waNum = String(S.settings.whatsapp || '').replace(/\D/g, '').replace(/^0/, '964');
+    const txt = `مرحباً، أود طلب المنتج:\n• ${cur.name}${selSize ? `\n• القياس: ${selSize}` : ''}${selColor ? `\n• اللون: ${selColor}` : ''}\n• السعر: ${fmt(cur.final_price)}`;
+    window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(txt)}`, '_blank', 'noopener');
+  }
+  if (e.target.id === 'shareProdBtn') {
+    const url = `${location.origin}/store?product=${cur.id}`;
+    if (navigator.share) {
+      navigator.share({ title: cur.name, url }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(url);
+      e.target.textContent = '✅ تم نسخ رابط المنتج';
+      setTimeout(() => { e.target.textContent = '🔗 مشاركة المنتج'; }, 1800);
+    }
   }
 };
 
@@ -773,8 +843,9 @@ function openOrder(fromCart) {
     const code = $('oCoupon').value.trim();
     if (!code) return;
     try {
-      const r = await fetch(`/api/coupons/check?code=${encodeURIComponent(code)}&subtotal=${subtotal}`);
+      const r = await fetch(apiUrl(`/api/coupons/check?code=${encodeURIComponent(code)}&subtotal=${subtotal}`));
       const d = await r.json();
+      if (!r.ok) throw new Error(d.error || API_CONNECTION_ERROR);
       if (!d.valid) {
         appliedCoupon = '';
         couponDiscount = 0;
@@ -786,7 +857,7 @@ function openOrder(fromCart) {
       }
       updateTotal();
     } catch {
-      $('couponMsg').innerHTML = '<div class="err">تعذر التحقق من الكود</div>';
+      $('couponMsg').innerHTML = `<div class="err">${esc(API_CONNECTION_ERROR)}</div>`;
     }
   };
 
@@ -794,7 +865,7 @@ function openOrder(fromCart) {
     const ph = $('oPhone').value.trim();
     if (ph.length < 10) return;
     try {
-      const r = await fetch('/api/customer?phone=' + encodeURIComponent(ph));
+      const r = await fetch(apiUrl('/api/customer?phone=' + encodeURIComponent(ph)));
       const d = await r.json();
       if (d.found) {
         if (!$('oName').value) $('oName').value = d.name || '';
@@ -822,7 +893,7 @@ function openOrder(fromCart) {
         coupon_code: appliedCoupon,
         note: $('oNote').value,
       };
-      const r = await fetch('/api/orders', {
+      const r = await fetch(apiUrl('/api/orders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -850,7 +921,7 @@ function openOrder(fromCart) {
           <button class="btn" onclick="closeOv('orderOv')">العودة للمتجر</button>
         </div>`;
     } catch {
-      $('oErr').textContent = 'حدث خطأ في الاتصال بالخادم';
+      $('oErr').textContent = API_CONNECTION_ERROR;
       btn.disabled = false;
       btn.textContent = 'تأكيد وإرسال الطلب';
     }
@@ -874,7 +945,7 @@ $('trackBtn').onclick = () => {
     const resBox = $('trkRes');
     resBox.innerHTML = '<div class="muted">جاري البحث...</div>';
     try {
-      const r = await fetch('/api/orders/track?phone=' + encodeURIComponent(ph));
+      const r = await fetch(apiUrl('/api/orders/track?phone=' + encodeURIComponent(ph)));
       const d = await r.json();
       if (!r.ok) { resBox.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
       if (!d.orders.length) { resBox.innerHTML = '<div class="muted">لا توجد طلبات مسجلة لهذا الرقم.</div>'; return; }
@@ -890,7 +961,7 @@ $('trackBtn').onclick = () => {
           <div style="margin-top:6px;font-weight:700">الإجمالي: ${fmt(o.total)} — ${esc(o.governorate)}</div>
         </div>`).join('');
     } catch {
-      resBox.innerHTML = '<div class="err">تعذر الاتصال بالخادم</div>';
+      resBox.innerHTML = `<div class="err">${esc(API_CONNECTION_ERROR)}</div>`;
     }
   };
 };
@@ -899,7 +970,10 @@ for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv']) {
   $(id).onclick = e => { if (e.target === $(id)) closeOv(id); };
 }
 
-load();
+load().catch(error => {
+  $('grid').innerHTML = `<div class="err" role="alert">${esc(error.message || API_CONNECTION_ERROR)}</div>`;
+  $('empty').style.display = 'none';
+});
 </script>
 </body>
 </html>
