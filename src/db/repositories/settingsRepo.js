@@ -85,6 +85,12 @@ async function update(b) {
     show_search: b.show_search !== undefined ? !!b.show_search : (cur.show_search ?? true),
     show_trust_bar: b.show_trust_bar !== undefined ? !!b.show_trust_bar : (cur.show_trust_bar ?? true),
     show_float_wa: b.show_float_wa !== undefined ? !!b.show_float_wa : (cur.show_float_wa ?? true),
+    google_client_id: String(b.google_client_id ?? cur.google_client_id ?? '').trim().slice(0, 180),
+    show_vip_ticker: b.show_vip_ticker !== undefined ? !!b.show_vip_ticker : (cur.show_vip_ticker ?? true),
+    vip_ticker_title: String(b.vip_ticker_title ?? cur.vip_ticker_title ?? '⭐ عملاؤنا المشهورون:').trim().slice(0, 60),
+    vip_customers: Array.isArray(b.vip_customers)
+      ? b.vip_customers.map(x => String(x || '').trim().slice(0, 60)).filter(Boolean).slice(0, 40)
+      : (cur.vip_customers || []),
     free_delivery_over: Math.max(0, Number(b.free_delivery_over ?? cur.free_delivery_over) || 0),
     min_order_amount: Math.max(0, Number(b.min_order_amount ?? cur.min_order_amount) || 0),
     instagram: String(b.instagram ?? cur.instagram).trim().slice(0, 200),

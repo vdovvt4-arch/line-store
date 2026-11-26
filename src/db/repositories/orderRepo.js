@@ -48,10 +48,36 @@ async function findByPhone(phone) {
   return rows.map(mapOrder);
 }
 
+async function findByCustomer(email, phone = '') {
+  if (email && phone) {
+    const rows = await db.queryAll(
+      `SELECT id, product_name, size, color, items, governorate, coupon_code, discount_amount, price, delivery_fee, total, status, created_at
+       FROM orders
+       WHERE customer_email=? OR phone=?
+       ORDER BY id DESC
+       LIMIT 30`,
+      [email, phone]
+    );
+    return rows.map(mapOrder);
+  }
+  if (email) {
+    const rows = await db.queryAll(
+      `SELECT id, product_name, size, color, items, governorate, coupon_code, discount_amount, price, delivery_fee, total, status, created_at
+       FROM orders
+       WHERE customer_email=?
+       ORDER BY id DESC
+       LIMIT 30`,
+      [email]
+    );
+    return rows.map(mapOrder);
+  }
+  return phone ? await findByPhone(phone) : [];
+}
+
 async function create(order, runner = db) {
   return await runner.insertReturningId(
-    `INSERT INTO orders(product_id, product_name, size, color, items, customer_name, phone, governorate, address, measurements, sketch, note, coupon_code, discount_amount, price, cost_total, profit, delivery_fee, total)
-     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO orders(product_id, product_name, size, color, items, customer_name, customer_email, phone, governorate, address, measurements, sketch, note, coupon_code, discount_amount, price, cost_total, profit, delivery_fee, total)
+     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       order.product_id,
       order.product_name,
@@ -59,6 +85,7 @@ async function create(order, runner = db) {
       order.color,
       order.items,
       order.customer_name,
+      order.customer_email || '',
       order.phone,
       order.governorate,
       order.address,
@@ -86,4 +113,4 @@ async function remove(id, runner = db) {
   return r.changes > 0;
 }
 
-module.exports = { findAll, findById, findByPhone, create, updateStatus, remove };
+module.exports = { findAll, findById, findByPhone, findByCustomer, create, updateStatus, remove };
