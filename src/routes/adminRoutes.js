@@ -1,3 +1,4 @@
+const db = require('../db/database');
 const { GOVERNORATES, ORDER_STATUSES } = require('../config');
 const productRepo = require('../db/repositories/productRepo');
 const orderRepo = require('../db/repositories/orderRepo');
@@ -5,11 +6,10 @@ const customerRepo = require('../db/repositories/customerRepo');
 const couponRepo = require('../db/repositories/couponRepo');
 const expenseRepo = require('../db/repositories/expenseRepo');
 const settingsRepo = require('../db/repositories/settingsRepo');
-const { createSession, requireAdmin, revokeSession } = require('../middleware/auth');
+const { createSession, requireAdmin, revokeSession, setAdminPassword } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rateLimit');
 const { AppError, json, readBody } = require('../utils/http');
 const { cleanProduct } = require('../utils/validators');
-const { uploadMedia, deleteMediaUrls } = require('../db/storage');
 
 async function handleAdminRoutes(req, res, method, pathname) {
   if (method === 'POST' && pathname === '/api/admin/login') {
@@ -17,7 +17,7 @@ async function handleAdminRoutes(req, res, method, pathname) {
       throw new AppError(429, 'محاولات دخول كثيرة، انتظر قليلاً');
     }
     const b = await readBody(req);
-    const token = createSession(b.password);
+    const token = await createSession(b.password);
     return json(res, 200, { token });
   }
 
@@ -50,16 +50,6 @@ async function handleAdminRoutes(req, res, method, pathname) {
     });
   }
 
-  if (method === 'POST' && pathname === '/api/admin/media') {
-    const body = await readBody(req);
-    return json(res, 201, await uploadMedia(body.image, body.folder));
-  }
-
-  if (method === 'DELETE' && pathname === '/api/admin/media') {
-    const body = await readBody(req);
-    return json(res, 200, { deleted: await deleteMediaUrls(body.urls) });
-  }
-
   if (method === 'POST' && pathname === '/api/admin/products') {
     const b = await readBody(req);
     const p = cleanProduct(b);
@@ -88,8 +78,6 @@ async function handleAdminRoutes(req, res, method, pathname) {
       return json(res, 200, updated);
     }
     if (method === 'DELETE') {
-      const product = await productRepo.findById(id);
-      if (product) await deleteMediaUrls(product.images);
       await productRepo.remove(id);
       return json(res, 200, { ok: true });
     }
@@ -102,11 +90,34 @@ async function handleAdminRoutes(req, res, method, pathname) {
       const b = await readBody(req);
       const status = String(b.status || '');
       if (!ORDER_STATUSES.includes(status)) throw new AppError(400, 'حالة غير صالحة');
-      if (!(await orderRepo.updateStatus(id, status))) throw new AppError(404, 'الطلب غير موجود');
+      const curOrder = await orderRepo.findById(id);
+      if (!curOrder) throw new AppError(404, 'الطلب غير موجود');
+
+      await db.withTransaction(async tx => {
+        await orderRepo.updateStatus(id, status, tx);
+        if (curOrder.status !== 'cancelled' && status === 'cancelled') {
+          for (const item of curOrder.items) {
+            if (item.product_id) await productRepo.incrementStock(item.product_id, Number(item.qty || 1), item.size || '', tx);
+          }
+        } else if (curOrder.status === 'cancelled' && status !== 'cancelled') {
+          for (const item of curOrder.items) {
+            if (item.product_id) await productRepo.decrementStock(item.product_id, Number(item.qty || 1), item.size || '', tx);
+          }
+        }
+      });
       return json(res, 200, { ok: true, status });
     }
     if (method === 'DELETE') {
-      await orderRepo.remove(id);
+      const curOrder = await orderRepo.findById(id);
+      if (!curOrder) throw new AppError(404, 'الطلب غير موجود');
+      await db.withTransaction(async tx => {
+        if (curOrder.status !== 'cancelled') {
+          for (const item of curOrder.items) {
+            if (item.product_id) await productRepo.incrementStock(item.product_id, Number(item.qty || 1), item.size || '', tx);
+          }
+        }
+        await orderRepo.remove(id, tx);
+      });
       return json(res, 200, { ok: true });
     }
   }
@@ -116,11 +127,8 @@ async function handleAdminRoutes(req, res, method, pathname) {
     if (!String(b.code || '').trim()) throw new AppError(400, 'كود الخصم مطلوب');
     try {
       return json(res, 201, await couponRepo.create(b));
-    } catch (error) {
-      if (error.code === '23505' || error.status === 409) {
-        throw new AppError(400, 'كود الخصم مستخدم مسبقاً');
-      }
-      throw error;
+    } catch {
+      throw new AppError(400, 'كود الخصم مستخدم مسبقاً');
     }
   }
 
@@ -154,6 +162,12 @@ async function handleAdminRoutes(req, res, method, pathname) {
   if (method === 'PUT' && pathname === '/api/admin/settings') {
     const b = await readBody(req);
     return json(res, 200, await settingsRepo.update(b));
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/password') {
+    const b = await readBody(req);
+    await setAdminPassword(b.password);
+    return json(res, 200, { ok: true });
   }
 
   throw new AppError(404, 'مسار غير موجود');
