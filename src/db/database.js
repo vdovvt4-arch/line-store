@@ -275,9 +275,15 @@ async function initDatabase() {
   if (isPg) {
     const { Pool } = require('pg');
     const isLocal = DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1');
+    const connStr = process.env.VERCEL && DATABASE_URL.includes('pooler.supabase.com:5432')
+      ? DATABASE_URL.replace(':5432/', ':6543/')
+      : DATABASE_URL;
     pool = new Pool({
-      connectionString: DATABASE_URL,
+      connectionString: connStr,
       ssl: isLocal ? false : { rejectUnauthorized: false },
+      max: process.env.VERCEL ? 2 : 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
     });
     await pool.query(PG_SCHEMA);
     console.log('[DB] Connected to Supabase / PostgreSQL');
