@@ -1,24 +1,39 @@
-const db = require('../supabase');
+const db = require('../database');
 const { DEFAULT_SETTINGS, GOVERNORATES } = require('../../config');
-const { isProjectMediaUrl } = require('../storage');
+const { parseJsonSafe } = require('../../utils/http');
 
-function cleanColor(value, fallback) {
-  return /^#[0-9a-fA-F]{6}$/.test(String(value || '').trim()) ? String(value).trim() : fallback;
+function cleanColor(val, fallback) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(val || '').trim()) ? String(val).trim() : fallback;
 }
 
-function cleanSlides(slides) {
-  if (!Array.isArray(slides)) return null;
-  return slides.slice(0, 8).map(slide => ({
-    title: String(slide?.title || '').trim().slice(0, 100),
-    subtitle: String(slide?.subtitle || '').trim().slice(0, 200),
-    badge: String(slide?.badge || '').trim().slice(0, 40),
-    image: isProjectMediaUrl(slide?.image) ? slide.image : '',
-  })).filter(slide => slide.title || slide.subtitle || slide.image);
+function cleanSlug(val, fallback) {
+  const s = String(val || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
+  if (!s || ['admin', 'api', 'index.html', 'store.html'].includes(s)) return fallback;
+  return s;
+}
+
+function cleanSlides(arr) {
+  if (!Array.isArray(arr)) return null;
+  return arr.slice(0, 8).map(s => ({
+    title: String(s?.title || '').trim().slice(0, 100),
+    subtitle: String(s?.subtitle || '').trim().slice(0, 200),
+    badge: String(s?.badge || '').trim().slice(0, 40),
+    image: typeof s?.image === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(s.image) && s.image.length < 2e6
+      ? s.image
+      : '',
+  })).filter(s => s.title || s.subtitle || s.image);
 }
 
 async function get() {
-  const row = await db.selectOne('settings', { key: 'eq.store' }, { role: 'anon' });
-  const parsed = row && row.value && typeof row.value === 'object' ? row.value : null;
+  const row = await db.queryGet("SELECT value FROM settings WHERE key='store'");
+  if (!row) return { ...DEFAULT_SETTINGS };
+  const parsed = parseJsonSafe(row.value, null);
   if (!parsed) return { ...DEFAULT_SETTINGS };
   return {
     ...DEFAULT_SETTINGS,
@@ -27,52 +42,57 @@ async function get() {
   };
 }
 
-async function update(body) {
-  const current = await get();
-  const delivery = { ...current.delivery };
-  if (body.delivery && typeof body.delivery === 'object') {
-    for (const governorate of GOVERNORATES) {
-      if (governorate in body.delivery) {
-        delivery[governorate] = Math.max(0, Number(body.delivery[governorate]) || 0);
-      }
+async function update(b) {
+  const cur = await get();
+  const delivery = { ...cur.delivery };
+  if (b.delivery && typeof b.delivery === 'object') {
+    for (const g of GOVERNORATES) {
+      if (g in b.delivery) delivery[g] = Math.max(0, Number(b.delivery[g]) || 0);
     }
   }
 
   const next = {
-    name: String(body.name ?? current.name).trim().slice(0, 80) || DEFAULT_SETTINGS.name,
-    logo_text: String(body.logo_text ?? current.logo_text).trim().slice(0, 12) || DEFAULT_SETTINGS.logo_text,
-    tagline: String(body.tagline ?? current.tagline).trim().slice(0, 120),
-    currency: String(body.currency ?? current.currency).trim().slice(0, 15) || DEFAULT_SETTINGS.currency,
-    phone: String(body.phone ?? current.phone).trim().slice(0, 30),
-    whatsapp: String(body.whatsapp ?? current.whatsapp).trim().slice(0, 30),
-    address: String(body.address ?? current.address).trim().slice(0, 200),
-    hours: String(body.hours ?? current.hours).trim().slice(0, 120),
-    footer_note: String(body.footer_note ?? current.footer_note).trim().slice(0, 200),
-    announce: String(body.announce ?? current.announce).trim().slice(0, 200),
-    show_announce: body.show_announce !== undefined ? Boolean(body.show_announce) : current.show_announce,
-    hero_title: String(body.hero_title ?? current.hero_title).trim().slice(0, 100),
-    hero_subtitle: String(body.hero_subtitle ?? current.hero_subtitle).trim().slice(0, 200),
-    show_hero: body.show_hero !== undefined ? Boolean(body.show_hero) : current.show_hero,
-    show_slider: body.show_slider !== undefined ? Boolean(body.show_slider) : current.show_slider,
-    slides: cleanSlides(body.slides) ?? current.slides ?? [],
-    default_theme: ['dark', 'light'].includes(body.default_theme) ? body.default_theme : current.default_theme,
-    accent_1: cleanColor(body.accent_1, current.accent_1),
-    accent_2: cleanColor(body.accent_2, current.accent_2),
-    card_radius: [8, 18, 28].includes(Number(body.card_radius)) ? Number(body.card_radius) : current.card_radius,
-    grid_cols: ['auto', '2', '3', '4'].includes(String(body.grid_cols)) ? String(body.grid_cols) : current.grid_cols,
-    show_size_chart: body.show_size_chart !== undefined ? Boolean(body.show_size_chart) : current.show_size_chart,
-    show_stock: body.show_stock !== undefined ? Boolean(body.show_stock) : current.show_stock,
-    hide_sold_out: body.hide_sold_out !== undefined ? Boolean(body.hide_sold_out) : current.hide_sold_out,
-    enable_cart: body.enable_cart !== undefined ? Boolean(body.enable_cart) : current.enable_cart,
-    enable_track: body.enable_track !== undefined ? Boolean(body.enable_track) : current.enable_track,
-    free_delivery_over: Math.max(0, Number(body.free_delivery_over ?? current.free_delivery_over) || 0),
-    min_order_amount: Math.max(0, Number(body.min_order_amount ?? current.min_order_amount) || 0),
-    instagram: String(body.instagram ?? current.instagram).trim().slice(0, 200),
-    tiktok: String(body.tiktok ?? current.tiktok).trim().slice(0, 200),
+    name: String(b.name ?? cur.name).trim().slice(0, 80) || DEFAULT_SETTINGS.name,
+    logo_text: String(b.logo_text ?? cur.logo_text).trim().slice(0, 12) || DEFAULT_SETTINGS.logo_text,
+    store_slug: b.store_slug !== undefined ? cleanSlug(b.store_slug, cur.store_slug || DEFAULT_SETTINGS.store_slug) : (cur.store_slug || DEFAULT_SETTINGS.store_slug),
+    tagline: String(b.tagline ?? cur.tagline).trim().slice(0, 120),
+    currency: String(b.currency ?? cur.currency).trim().slice(0, 15) || DEFAULT_SETTINGS.currency,
+    phone: String(b.phone ?? cur.phone).trim().slice(0, 30),
+    whatsapp: String(b.whatsapp ?? cur.whatsapp).trim().slice(0, 30),
+    address: String(b.address ?? cur.address).trim().slice(0, 200),
+    hours: String(b.hours ?? cur.hours).trim().slice(0, 120),
+    footer_note: String(b.footer_note ?? cur.footer_note).trim().slice(0, 200),
+    announce: String(b.announce ?? cur.announce).trim().slice(0, 200),
+    show_announce: b.show_announce !== undefined ? !!b.show_announce : cur.show_announce,
+    hero_title: String(b.hero_title ?? cur.hero_title).trim().slice(0, 100),
+    hero_subtitle: String(b.hero_subtitle ?? cur.hero_subtitle).trim().slice(0, 200),
+    show_hero: b.show_hero !== undefined ? !!b.show_hero : cur.show_hero,
+    show_slider: b.show_slider !== undefined ? !!b.show_slider : cur.show_slider,
+    slides: cleanSlides(b.slides) ?? cur.slides ?? [],
+    default_theme: ['dark', 'light'].includes(b.default_theme) ? b.default_theme : cur.default_theme,
+    accent_1: cleanColor(b.accent_1, cur.accent_1),
+    accent_2: cleanColor(b.accent_2, cur.accent_2),
+    card_radius: [8, 18, 28].includes(Number(b.card_radius)) ? Number(b.card_radius) : cur.card_radius,
+    grid_cols: ['auto', '2', '3', '4'].includes(String(b.grid_cols)) ? String(b.grid_cols) : cur.grid_cols,
+    show_size_chart: b.show_size_chart !== undefined ? !!b.show_size_chart : cur.show_size_chart,
+    show_stock: b.show_stock !== undefined ? !!b.show_stock : cur.show_stock,
+    hide_sold_out: b.hide_sold_out !== undefined ? !!b.hide_sold_out : cur.hide_sold_out,
+    enable_cart: b.enable_cart !== undefined ? !!b.enable_cart : cur.enable_cart,
+    enable_track: b.enable_track !== undefined ? !!b.enable_track : cur.enable_track,
+    free_delivery_over: Math.max(0, Number(b.free_delivery_over ?? cur.free_delivery_over) || 0),
+    min_order_amount: Math.max(0, Number(b.min_order_amount ?? cur.min_order_amount) || 0),
+    instagram: String(b.instagram ?? cur.instagram).trim().slice(0, 200),
+    tiktok: String(b.tiktok ?? cur.tiktok).trim().slice(0, 200),
     delivery,
   };
-  await db.upsertOne('settings', { key: 'store', value: next }, 'key');
+
+  await db.execute(
+    `INSERT INTO settings(key, value) VALUES('store', ?)
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+    [JSON.stringify(next)]
+  );
+
   return next;
 }
 
-module.exports = { get, update, cleanSlides };
+module.exports = { get, update };
