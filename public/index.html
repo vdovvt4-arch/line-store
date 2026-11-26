@@ -1282,9 +1282,34 @@ function openProductForm(p = null) {
 }
 
 function renderCustomers() {
+  const accs = D.customerAccounts || [];
   $('content').innerHTML = `
     <div class="card tbl-wrap">
-      <h2>الزبائن (${D.customers.length})</h2>
+      <h2>حسابات Google المسجلة (${accs.length})</h2>
+      <table>
+        <thead><tr><th>الزبون</th><th>البريد الإلكتروني</th><th>الهاتف</th><th>المحافظة</th><th>تمييز في الشريط</th></tr></thead>
+        <tbody>
+          ${accs.map(a => `
+            <tr>
+              <td style="display:flex;align-items:center;gap:8px">
+                ${a.picture ? `<img src="${esc(a.picture)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : ''}
+                <strong>${esc(a.name || '-')}</strong>
+              </td>
+              <td dir="ltr">${esc(a.email)}</td>
+              <td>${esc(a.phone || '-')}</td>
+              <td>${esc(a.governorate || '-')}</td>
+              <td>
+                <button type="button" class="btn btn-sm ${a.is_vip ? '' : 'btn-sec'}" data-vip-email="${esc(a.email)}" data-vip-cur="${a.is_vip ? 1 : 0}">
+                  ${a.is_vip ? '⭐ مشهور (مفعّل)' : 'إضافة للشريط ⭐'}
+                </button>
+              </td>
+            </tr>`).join('') || '<tr><td colspan="5" class="muted">لا يوجد زبائن مسجلون بحساب Google بعد.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card tbl-wrap">
+      <h2>سجل طلبات الزبائن (${D.customers.length})</h2>
       <table>
         <thead><tr><th>الاسم</th><th>الهاتف</th><th>المحافظة</th><th>العنوان</th><th>الطلبات</th><th>إجمالي الصرف</th></tr></thead>
         <tbody>
@@ -1300,6 +1325,21 @@ function renderCustomers() {
         </tbody>
       </table>
     </div>`;
+
+  $('content').querySelectorAll('[data-vip-email]').forEach(b => {
+    b.onclick = async () => {
+      try {
+        await api('/api/admin/customer-accounts/vip', {
+          method: 'PATCH',
+          body: JSON.stringify({ email: b.dataset.vipEmail, is_vip: b.dataset.vipCur !== '1' }),
+        });
+        toast('تم تحديث قائمة المشهورين');
+        await init();
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
 }
 
 function renderSettings() {
@@ -1441,6 +1481,17 @@ function renderSettings() {
     </div>
 
     <div class="card">
+      <h2>⭐ شريط الزبائن المشهورين وتسجيل دخول Google</h2>
+      <label class="chk" style="margin-bottom:10px"><input id="sShowVip" type="checkbox" ${st.show_vip_ticker !== false ? 'checked' : ''}> إظهار الشريط المتحرك لأسماء الزبائن المشهورين (مثل شريط الأخبار)</label>
+      <div class="row">
+        <div><label>عنوان الشريط المتحرك</label><input id="sVipTitle" value="${esc(st.vip_ticker_title || '⭐ عملاؤنا المشهورون:')}"></div>
+        <div><label>Google Client ID (لتفعيل دخول الزبائن بـ Google)</label><input id="sGoogleId" dir="ltr" value="${esc(st.google_client_id || '')}" placeholder="xxxx.apps.googleusercontent.com"></div>
+      </div>
+      <label>أسماء الزبائن المشهورين في الشريط (افصل بينها بفاصلة أو سطر جديد)</label>
+      <textarea id="sVipList" rows="2">${esc((st.vip_customers || []).join('، '))}</textarea>
+    </div>
+
+    <div class="card">
       <h2>شروط الطلب والتوصيل</h2>
       <div class="row" style="margin-bottom:12px">
         <div><label>الحد الأدنى للطلب (0 = بدون حد)</label><input id="sMinOrd" type="number" min="0" value="${Number(st.min_order_amount || 0)}"></div>
@@ -1570,6 +1621,10 @@ function renderSettings() {
           show_trust_bar: $('sShowTrust').checked,
           show_search: $('sShowSearch').checked,
           show_float_wa: $('sShowFloatWa').checked,
+          show_vip_ticker: $('sShowVip').checked,
+          vip_ticker_title: $('sVipTitle').value,
+          vip_customers: $('sVipList').value.split(/[,،\n]/).map(s => s.trim()).filter(Boolean),
+          google_client_id: $('sGoogleId').value,
           show_slider: $('sShowSl').checked,
           slides: slidesData,
           show_size_chart: $('sShowSz').checked,

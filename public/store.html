@@ -10,6 +10,7 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="/manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700;900&family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
   --bg:#14171f;--card:#1e232e;--card2:#262c3a;--inp:#161a23;--hdr:rgba(30,35,46,.95);
@@ -23,6 +24,17 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column;transition:background .2s,color .2s}
 .ann-bar{display:none;background:var(--g1);color:#fff;height:34px;align-items:center;justify-content:center;font-weight:700;font-size:13px;padding:0 12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vip-ticker{display:none;background:var(--card);border-bottom:1px solid var(--line);height:36px;align-items:center;overflow:hidden;font-size:12.5px}
+.vip-badge{background:var(--amber);color:#111;font-weight:900;padding:0 12px;height:100%;display:flex;align-items:center;gap:5px;white-space:nowrap;z-index:2;flex:0 0 auto}
+.vip-track-wrap{flex:1;overflow:hidden;position:relative;height:100%;display:flex;align-items:center}
+.vip-track{display:inline-flex;align-items:center;gap:22px;white-space:nowrap;padding-inline:18px;animation:vipMarquee 26s linear infinite}
+.vip-ticker:hover .vip-track{animation-play-state:paused}
+.vip-name{font-weight:700;color:var(--txt);display:inline-flex;align-items:center;gap:6px}
+.vip-sep{color:var(--amber);font-size:11px}
+@keyframes vipMarquee{0%{transform:translateX(0)}100%{transform:translateX(50%)}}
+.acc-btn{border:1px solid var(--line);background:var(--card2);color:var(--txt);padding:5px 10px;border-radius:10px;cursor:pointer;font:700 12.5px var(--font);display:inline-flex;align-items:center;gap:6px;height:38px;white-space:nowrap}
+.acc-btn:hover{border-color:var(--g1)}
+.acc-ava{width:22px;height:22px;border-radius:50%;object-fit:cover}
 header{position:sticky;top:0;z-index:20;background:var(--hdr);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .wrap{max-width:1120px;margin:auto;padding:0 16px;width:100%}
 .nav-row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:72px;padding:8px 0}
@@ -207,6 +219,7 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
       </nav>
 
       <div class="actions">
+        <button class="acc-btn" id="accBtn" type="button" title="حسابي">👤 دخول</button>
         <button class="ico-btn" id="favNavBtn" type="button" title="المفضلة">♡</button>
         <button class="ico-btn" id="cartBtn" type="button" title="السلة">🛒<span class="cart-cnt" id="cartCnt">0</span></button>
         <button class="ico-btn" id="themeBtn" type="button" title="تبديل المظهر">☀️</button>
@@ -215,6 +228,10 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
     </div>
   </div>
 </header>
+<div id="vipTicker" class="vip-ticker">
+  <div class="vip-badge" id="vipTitle">⭐ عملاؤنا المشهورون:</div>
+  <div class="vip-track-wrap"><div class="vip-track" id="vipTrack"></div></div>
+</div>
 
 <main class="wrap">
   <section class="slider" id="promoSlider" style="display:none"></section>
@@ -296,6 +313,7 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
 <div class="overlay" id="cartOv"><div class="modal" id="cartModal"></div></div>
 <div class="overlay" id="orderOv"><div class="modal" id="orderModal"></div></div>
 <div class="overlay" id="trackOv"><div class="modal" id="trackModal"></div></div>
+<div class="overlay" id="accOv"><div class="modal" id="accModal"></div></div>
 <a class="float-wa" id="floatWa" target="_blank" rel="noopener">💬 تواصل معنا</a>
 <button class="top-btn" id="topBtn" type="button" title="العودة للأعلى">⬆️</button>
 
@@ -321,6 +339,9 @@ let cart = readJsonStorage('line_cart', []);
 let favs = readJsonStorage('line_favs', []);
 let checkoutItems = [];
 let initialProductHandled = false;
+let custToken = localStorage.getItem('line_cust_token') || '';
+let custUser = null;
+try { custUser = JSON.parse(localStorage.getItem('line_cust_user') || 'null'); } catch {}
 
 function toggleFav(id) {
   const num = Number(id);
@@ -423,6 +444,17 @@ function applyStoreData(data) {
   } else {
     $('ann').style.display = 'none';
   }
+
+  const vipNames = Array.isArray(st.vip_names) ? st.vip_names : (Array.isArray(st.vip_customers) ? st.vip_customers : []);
+  if (st.show_vip_ticker !== false && vipNames.length) {
+    $('vipTitle').textContent = st.vip_ticker_title || '⭐ عملاؤنا المشهورون:';
+    const itemsHtml = vipNames.map(n => `<span class="vip-name">👑 ${esc(n)}</span><span class="vip-sep">✦</span>`).join('');
+    $('vipTrack').innerHTML = itemsHtml + itemsHtml;
+    $('vipTicker').style.display = 'flex';
+  } else {
+    $('vipTicker').style.display = 'none';
+  }
+  renderAccBtn();
 
   if (st.show_slider !== false && Array.isArray(st.slides) && st.slides.length) {
     renderSlider(st.slides);
@@ -1051,6 +1083,13 @@ function openOrder(fromCart) {
 
   $('orderOv').classList.add('open');
 
+  if (custUser) {
+    if (custUser.phone && !$('oPhone').value) $('oPhone').value = custUser.phone;
+    if (custUser.name && !$('oName').value) $('oName').value = custUser.name;
+    if (custUser.governorate && !$('oGov').value) $('oGov').value = custUser.governorate;
+    if (custUser.address && !$('oAddr').value) $('oAddr').value = custUser.address;
+  }
+
   function updateTotal() {
     const g = $('oGov').value;
     const afterDisc = Math.max(0, subtotal - couponDiscount);
@@ -1133,9 +1172,11 @@ function openOrder(fromCart) {
         coupon_code: appliedCoupon,
         note: $('oNote').value,
       };
+      const ordHeaders = { 'Content-Type': 'application/json' };
+      if (custToken) ordHeaders['X-Customer-Token'] = custToken;
       const r = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ordHeaders,
         body: JSON.stringify(payload),
       });
       const d = await r.json();
@@ -1220,9 +1261,145 @@ $('trackBtn').onclick = () => {
   };
 };
 
-for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv']) {
+for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv', 'accOv']) {
   $(id).onclick = e => { if (e.target === $(id)) closeOv(id); };
 }
+
+function renderAccBtn() {
+  const b = $('accBtn');
+  if (!b) return;
+  if (custUser) {
+    const first = (custUser.name || custUser.email || 'حسابي').split(' ')[0];
+    b.innerHTML = `${custUser.picture ? `<img class="acc-ava" src="${esc(custUser.picture)}" alt="">` : '👤'}<span>${esc(first)}</span>`;
+  } else {
+    b.innerHTML = '👤 دخول';
+  }
+}
+
+async function handleGoogleCredential(resp) {
+  try {
+    const r = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: resp.credential }),
+    });
+    const d = await r.json();
+    if (!r.ok) return alert(d.error || 'تعذر تسجيل الدخول بـ Google');
+    custToken = d.token;
+    custUser = d.user;
+    localStorage.setItem('line_cust_token', custToken);
+    localStorage.setItem('line_cust_user', JSON.stringify(custUser));
+    renderAccBtn();
+    openAccountModal();
+  } catch {
+    alert('تعذر الاتصال بالخادم');
+  }
+}
+
+async function openAccountModal() {
+  $('accOv').classList.add('open');
+  if (!custToken || !custUser) {
+    const gid = (S.settings.google_client_id || '').trim();
+    $('accModal').innerHTML = `
+      <button class="close" onclick="closeOv('accOv')">×</button>
+      <h2 style="margin-top:0">حساب الزبون</h2>
+      <p class="muted">سجّل دخولك بحساب Google لحفظ عنوانك ومتابعة طلباتك بسهولة.</p>
+      <div id="gBtnWrap" style="display:flex;justify-content:center;margin:18px 0"></div>
+      ${!gid ? '<div class="muted" style="text-align:center;padding:12px;border:1px dashed var(--line);border-radius:12px">تسجيل دخول Google بانتظار إضافة Google Client ID من لوحة الإدارة.</div>' : ''}`;
+    if (gid && window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({ client_id: gid, callback: handleGoogleCredential });
+      window.google.accounts.id.renderButton($('gBtnWrap'), { theme: 'outline', size: 'large', text: 'continue_with', width: 280 });
+    }
+    return;
+  }
+
+  $('accModal').innerHTML = `
+    <button class="close" onclick="closeOv('accOv')">×</button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      ${custUser.picture ? `<img src="${esc(custUser.picture)}" style="width:48px;height:48px;border-radius:50%;object-fit:cover">` : ''}
+      <div>
+        <h2 style="margin:0">${esc(custUser.name || 'عميل لاين')}</h2>
+        <div class="muted">${esc(custUser.email)} ${custUser.is_vip ? '· <strong style="color:var(--amber)">⭐ عميل مميز</strong>' : ''}</div>
+      </div>
+    </div>
+    <div class="row">
+      <div><label>الاسم</label><input id="accName" value="${esc(custUser.name || '')}"></div>
+      <div><label>رقم الهاتف</label><input id="accPhone" value="${esc(custUser.phone || '')}" placeholder="07xxxxxxxxx"></div>
+    </div>
+    <div class="row">
+      <div>
+        <label>المحافظة</label>
+        <select id="accGov">
+          <option value="">اختر المحافظة</option>
+          ${Object.keys(S.settings.delivery || {}).map(g => `<option value="${esc(g)}" ${custUser.governorate === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}
+        </select>
+      </div>
+      <div><label>العنوان</label><input id="accAddr" value="${esc(custUser.address || '')}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" id="saveAccBtn" type="button" style="flex:1">حفظ بياناتي</button>
+      <button class="btn btn-sec" id="logoutAccBtn" type="button" style="width:auto;padding:0 16px">خروج</button>
+    </div>
+    <div id="accMsg" style="margin-top:8px"></div>
+    <h3 style="margin:18px 0 8px">طلباتي</h3>
+    <div id="accOrders"><div class="muted">جاري تحميل الطلبات...</div></div>`;
+
+  $('logoutAccBtn').onclick = () => {
+    custToken = '';
+    custUser = null;
+    localStorage.removeItem('line_cust_token');
+    localStorage.removeItem('line_cust_user');
+    renderAccBtn();
+    closeOv('accOv');
+  };
+
+  $('saveAccBtn').onclick = async () => {
+    try {
+      const r = await fetch('/api/customer/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Customer-Token': custToken },
+        body: JSON.stringify({
+          name: $('accName').value,
+          phone: $('accPhone').value,
+          governorate: $('accGov').value,
+          address: $('accAddr').value,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { $('accMsg').innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+      custUser = d.user;
+      localStorage.setItem('line_cust_user', JSON.stringify(custUser));
+      renderAccBtn();
+      $('accMsg').innerHTML = '<div class="ok-msg">تم حفظ بياناتك بنجاح ✅</div>';
+    } catch {
+      $('accMsg').innerHTML = '<div class="err">تعذر الاتصال بالخادم</div>';
+    }
+  };
+
+  try {
+    const r = await fetch('/api/customer/me', { headers: { 'X-Customer-Token': custToken } });
+    if (r.status === 401) { $('logoutAccBtn').click(); return; }
+    const d = await r.json();
+    if (d.user) {
+      custUser = d.user;
+      localStorage.setItem('line_cust_user', JSON.stringify(custUser));
+    }
+    const ords = d.orders || [];
+    $('accOrders').innerHTML = ords.length ? ords.map(o => `
+      <div class="trk">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>طلب #${o.id}</strong>
+          <span class="stt">${esc(STATUS_AR[o.status] || o.status)}</span>
+        </div>
+        <div class="muted" style="margin-top:4px">${o.items.map(i => `${esc(i.product_name)} × ${i.qty}`).join(' ، ')}</div>
+        <div style="margin-top:4px;font-weight:700">الإجمالي: ${fmt(o.total)}</div>
+      </div>`).join('') : '<div class="muted">لا توجد طلبات مسجلة لحسابك بعد.</div>';
+  } catch {
+    $('accOrders').innerHTML = '<div class="err">تعذر تحميل الطلبات</div>';
+  }
+}
+
+$('accBtn').onclick = openAccountModal;
 
 window.addEventListener('scroll', () => {
   $('topBtn').classList.toggle('show', window.scrollY > 260);
