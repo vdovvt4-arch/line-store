@@ -17,16 +17,27 @@ if (fs.existsSync(envFile)) {
 
 const { PORT } = require('./src/config');
 const { createApp } = require('./src/app');
+const { closeDatabase } = require('./src/db/database');
 
-const server = createApp();
+const HOST = process.env.HOST || '0.0.0.0';
 
-server.listen(PORT, () => {
-  console.log(`LINE Store running at http://localhost:${PORT}`);
-  console.log(`Admin dashboard at http://localhost:${PORT}/admin`);
-});
+(async () => {
+  const server = await createApp();
 
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    server.close(() => process.exit(0));
+  server.listen(PORT, HOST, () => {
+    console.log(`Admin dashboard running at http://localhost:${PORT}/`);
+    console.log(`Customer store running at http://localhost:${PORT}/store/line`);
   });
-}
+
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      server.close(async () => {
+        await closeDatabase();
+        process.exit(0);
+      });
+    });
+  }
+})().catch(err => {
+  console.error('[Startup Error]', err);
+  process.exit(1);
+});

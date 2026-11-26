@@ -3,4 +3,3 @@ node_modules/
 *.db-wal
 *.db-shm
 .env
-supabase/functions/.env

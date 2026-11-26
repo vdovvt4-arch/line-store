@@ -3,7 +3,7 @@ services:
     name: line-menswear-store
     runtime: node
     plan: free
-    buildCommand: ""
+    buildCommand: npm install --omit=dev
     startCommand: node server.js
     healthCheckPath: /api/health
     envVars:
@@ -11,11 +11,5 @@ services:
         value: 22.14.0
       - key: ADMIN_PASSWORD
         generateValue: true
-      - key: SUPABASE_URL
-        value: https://diwdjdaikrlnsfrzthdx.supabase.co
-      - key: SUPABASE_ANON_KEY
+      - key: DATABASE_URL
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: CORS_ORIGINS
-        value: https://vdovvt4-arch.github.io
