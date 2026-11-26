@@ -3,6 +3,7 @@ const { GOVERNORATES, ORDER_STATUSES } = require('../config');
 const productRepo = require('../db/repositories/productRepo');
 const orderRepo = require('../db/repositories/orderRepo');
 const customerRepo = require('../db/repositories/customerRepo');
+const customerAccountRepo = require('../db/repositories/customerAccountRepo');
 const couponRepo = require('../db/repositories/couponRepo');
 const expenseRepo = require('../db/repositories/expenseRepo');
 const settingsRepo = require('../db/repositories/settingsRepo');
@@ -31,10 +32,11 @@ async function handleAdminRoutes(req, res, method, pathname) {
   }
 
   if (method === 'GET' && pathname === '/api/admin/bootstrap') {
-    const [products, orders, customers, coupons, expenses, settings] = await Promise.all([
+    const [products, orders, customers, customerAccounts, coupons, expenses, settings] = await Promise.all([
       productRepo.findAll(),
       orderRepo.findAll(),
       customerRepo.findAllWithStats(),
+      customerAccountRepo.findAll(),
       couponRepo.findAll(),
       expenseRepo.findAll(),
       settingsRepo.get(),
@@ -43,11 +45,20 @@ async function handleAdminRoutes(req, res, method, pathname) {
       products,
       orders,
       customers,
+      customerAccounts,
       coupons,
       expenses,
       settings,
       governorates: GOVERNORATES,
     });
+  }
+
+  if (method === 'PATCH' && pathname === '/api/admin/customer-accounts/vip') {
+    const b = await readBody(req);
+    if (!b.email) throw new AppError(400, 'البريد الإلكتروني مطلوب');
+    const updated = await customerAccountRepo.setVip(b.email, !!b.is_vip);
+    if (!updated) throw new AppError(404, 'الحساب غير موجود');
+    return json(res, 200, updated);
   }
 
   if (method === 'POST' && pathname === '/api/admin/products') {

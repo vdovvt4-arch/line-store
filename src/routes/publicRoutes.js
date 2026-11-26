@@ -2,8 +2,10 @@ const db = require('../db/database');
 const productRepo = require('../db/repositories/productRepo');
 const orderRepo = require('../db/repositories/orderRepo');
 const customerRepo = require('../db/repositories/customerRepo');
+const customerAccountRepo = require('../db/repositories/customerAccountRepo');
 const couponRepo = require('../db/repositories/couponRepo');
 const settingsRepo = require('../db/repositories/settingsRepo');
+const { createCustomerToken, getCustomerFromReq } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rateLimit');
 const { AppError, json, readBody } = require('../utils/http');
 const { normPhone } = require('../utils/validators');
@@ -14,14 +16,69 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
   }
 
   if (method === 'GET' && pathname === '/api/store') {
-    const [settings, rawProducts] = await Promise.all([
+    const [settings, rawProducts, vipAccountNames] = await Promise.all([
       settingsRepo.get(),
       productRepo.findPublished(),
+      customerAccountRepo.findVipNames(),
     ]);
     const products = settings.hide_sold_out
       ? rawProducts.filter(p => !p.sold_out)
       : rawProducts;
-    return json(res, 200, { settings, products });
+    const vip_names = [...new Set([...(settings.vip_customers || []), ...vipAccountNames])];
+    return json(res, 200, { settings: { ...settings, vip_names }, products });
+  }
+
+  if (method === 'POST' && pathname === '/api/auth/google') {
+    if (!rateLimit(req, 'gauth', 20, 600000)) {
+      throw new AppError(429, 'محاولات كثيرة، حاول بعد قليل');
+    }
+    const b = await readBody(req);
+    const credential = String(b.credential || '').trim();
+    if (!credential) throw new AppError(400, 'رمز التحقق من Google مفقود');
+
+    const settings = await settingsRepo.get();
+    const expectedAud = (settings.google_client_id || process.env.GOOGLE_CLIENT_ID || '').trim();
+    if (!expectedAud) throw new AppError(400, 'تسجيل دخول Google غير مفعّل في إعدادات المتجر');
+
+    const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!verifyRes.ok) throw new AppError(401, 'فشل التحقق من حساب Google');
+    const info = await verifyRes.json();
+    if (info.aud !== expectedAud || (info.email_verified !== 'true' && info.email_verified !== true) || !info.email) {
+      throw new AppError(401, 'بيانات حساب Google غير صالحة');
+    }
+
+    const user = await customerAccountRepo.upsertGoogle({
+      email: info.email,
+      sub: info.sub,
+      name: info.name || info.email.split('@')[0],
+      picture: info.picture || '',
+    });
+    const token = createCustomerToken(user.email);
+    return json(res, 200, { token, user });
+  }
+
+  if (method === 'GET' && pathname === '/api/customer/me') {
+    const email = getCustomerFromReq(req);
+    if (!email) throw new AppError(401, 'يرجى تسجيل الدخول أولاً');
+    const user = await customerAccountRepo.findByEmail(email);
+    if (!user) throw new AppError(404, 'الحساب غير موجود');
+    const orders = await orderRepo.findByCustomer(user.email, user.phone);
+    return json(res, 200, { user, orders });
+  }
+
+  if (method === 'PUT' && pathname === '/api/customer/me') {
+    const email = getCustomerFromReq(req);
+    if (!email) throw new AppError(401, 'يرجى تسجيل الدخول أولاً');
+    const b = await readBody(req);
+    const phone = b.phone ? normPhone(b.phone) : '';
+    if (b.phone && !phone) throw new AppError(400, 'رقم الهاتف غير صحيح (07xxxxxxxxx)');
+    const user = await customerAccountRepo.updateProfile(email, {
+      name: b.name,
+      phone,
+      governorate: b.governorate,
+      address: b.address,
+    });
+    return json(res, 200, { user });
   }
 
   if (method === 'GET' && pathname === '/api/customer') {
@@ -169,6 +226,8 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
       ? `${first.product_name} (+${verifiedItems.length - 1} منتجات)`
       : first.product_name;
 
+    const customerEmail = getCustomerFromReq(req) || '';
+
     const id = await db.withTransaction(async tx => {
       await customerRepo.upsert({ phone, name, governorate: gov, address }, tx);
 
@@ -179,6 +238,7 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
         color: first.color,
         items: JSON.stringify(verifiedItems),
         customer_name: name,
+        customer_email: customerEmail,
         phone,
         governorate: gov,
         address,
