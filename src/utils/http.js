@@ -12,6 +12,8 @@ function json(res, status, data) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'same-origin',
   });
   res.end(JSON.stringify(data));
 }
@@ -42,6 +44,7 @@ function readBody(req) {
 }
 
 function parseJsonSafe(str, fallback) {
+  if (str !== null && typeof str === 'object') return str;
   try {
     return JSON.parse(str);
   } catch {
