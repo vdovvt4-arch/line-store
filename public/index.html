@@ -1659,14 +1659,34 @@ function renderSettings() {
             <option value="light" ${st.default_theme === 'light' ? 'selected' : ''}>صباحي (فاتح)</option>
           </select>
         </div>
-        <div><label>اللون الرئيسي 1</label><input id="sAcc1" type="color" value="${esc(st.accent_1 || '#d4af37')}"></div>
+        <div><label>اللون الرئيسي 1</label><input id="sAcc1" type="color" value="${esc(st.accent_1 || '#3250a3')}"></div>
         <div><label>اللون الرئيسي 2</label><input id="sAcc2" type="color" value="${esc(st.accent_2 || '#1f6feb')}"></div>
       </div>
+      <div class="row3" style="margin-top:8px">
+        <div><label>لون الأسعار والشارات</label><input id="sPriceClr" type="color" value="${esc(st.price_color || '#f59e0b')}"></div>
+        <div>
+          <label>لون البطاقات المخصص</label>
+          <div style="display:flex;gap:6px">
+            <input id="sCardClr" type="color" value="${esc(st.card_color || '#1e232e')}" style="flex:1">
+            <button type="button" class="btn btn-sec btn-sm" id="clrCardClrBtn">افتراضي</button>
+          </div>
+          <input type="hidden" id="sCardClrActive" value="${esc(st.card_color || '')}">
+        </div>
+        <div>
+          <label>لون النصوص المخصص</label>
+          <div style="display:flex;gap:6px">
+            <input id="sTxtClr" type="color" value="${esc(st.txt_color || '#f4f6fa')}" style="flex:1">
+            <button type="button" class="btn btn-sec btn-sm" id="clrTxtClrBtn">افتراضي</button>
+          </div>
+          <input type="hidden" id="sTxtClrActive" value="${esc(st.txt_color || '')}">
+        </div>
+      </div>
       <div class="preset-row">
-        <button type="button" class="btn btn-sec btn-sm" data-pre="#d4af37,#1f6feb">ذهبي × أزرق (كلاسيك رجالي)</button>
-        <button type="button" class="btn btn-sec btn-sm" data-pre="#10b981,#0f766e">زمردي × أخضر داكن</button>
-        <button type="button" class="btn btn-sec btn-sm" data-pre="#e11d48,#7c3aed">عنابي × بنفسجي</button>
-        <button type="button" class="btn btn-sec btn-sm" data-pre="#f59e0b,#ea580c">عنبر × برتقالي</button>
+        <button type="button" class="btn btn-sec btn-sm" data-pre="#3250a3,#1f6feb,#f59e0b">أزرق ملكي × عنبري (الأماني)</button>
+        <button type="button" class="btn btn-sec btn-sm" data-pre="#d4af37,#1f6feb,#d4af37">ذهبي × أزرق (كلاسيك رجالي)</button>
+        <button type="button" class="btn btn-sec btn-sm" data-pre="#10b981,#0f766e,#10b981">زمردي × أخضر داكن</button>
+        <button type="button" class="btn btn-sec btn-sm" data-pre="#e11d48,#7c3aed,#f59e0b">عنابي × بنفسجي</button>
+        <button type="button" class="btn btn-sec btn-sm" data-pre="#f59e0b,#ea580c,#f59e0b">عنبر × برتقالي</button>
       </div>
       <div class="preview-strip">
         <div>
@@ -1892,6 +1912,11 @@ function renderSettings() {
   };
   $('rmHeroImgBtn').onclick = () => { heroImageData = ''; $('sHeroImgPrev').innerHTML = '<span class="muted">بدون صورة للبانر</span>'; };
 
+  $('sCardClr').oninput = () => { $('sCardClrActive').value = $('sCardClr').value; };
+  $('clrCardClrBtn').onclick = () => { $('sCardClrActive').value = ''; toast('سيُستخدم لون البطاقات الافتراضي'); };
+  $('sTxtClr').oninput = () => { $('sTxtClrActive').value = $('sTxtClr').value; };
+  $('clrTxtClrBtn').onclick = () => { $('sTxtClrActive').value = ''; toast('سيُستخدم لون النصوص الافتراضي'); };
+
   const syncPreview = () => {
     document.documentElement.style.setProperty('--g1', $('sAcc1').value);
     document.documentElement.style.setProperty('--g2', $('sAcc2').value);
@@ -1909,9 +1934,10 @@ function renderSettings() {
 
   $('content').querySelectorAll('[data-pre]').forEach(b => {
     b.onclick = () => {
-      const [c1, c2] = b.dataset.pre.split(',');
+      const [c1, c2, c3] = b.dataset.pre.split(',');
       $('sAcc1').value = c1;
       $('sAcc2').value = c2;
+      if (c3) $('sPriceClr').value = c3;
       syncPreview();
     };
   });
@@ -1940,6 +1966,9 @@ function renderSettings() {
           default_theme: $('sTheme').value,
           accent_1: $('sAcc1').value,
           accent_2: $('sAcc2').value,
+          price_color: $('sPriceClr').value,
+          card_color: $('sCardClrActive').value,
+          txt_color: $('sTxtClrActive').value,
           grid_cols: $('sCols').value,
           card_radius: Number($('sRad').value),
           font_style: $('sFont').value,

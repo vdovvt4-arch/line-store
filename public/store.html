@@ -232,6 +232,7 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
 
       <div class="actions">
         <button class="acc-btn" id="accBtn" type="button" title="حسابي">👤 دخول</button>
+        <button class="ico-btn" id="installAppBtn" type="button" title="تحميل التطبيق على جهازك" style="display:none">📲</button>
         <button class="ico-btn" id="custSetBtn" type="button" title="إعدادات الزبون واللغة">⚙️</button>
         <button class="ico-btn" id="favNavBtn" type="button" title="المفضلة">♡</button>
         <button class="ico-btn" id="cartBtn" type="button" title="السلة">🛒<span class="cart-cnt" id="cartCnt">0</span></button>
@@ -454,6 +455,11 @@ function applyStoreData(data) {
 
   if (st.accent_1) document.documentElement.style.setProperty('--g1', st.accent_1);
   if (st.accent_2) document.documentElement.style.setProperty('--g2', st.accent_2);
+  if (st.price_color) document.documentElement.style.setProperty('--amber', st.price_color);
+  if (st.card_color) document.documentElement.style.setProperty('--card', st.card_color);
+  else document.documentElement.style.removeProperty('--card');
+  if (st.txt_color) document.documentElement.style.setProperty('--txt', st.txt_color);
+  else document.documentElement.style.removeProperty('--txt');
   if (st.card_radius) document.documentElement.style.setProperty('--radius', st.card_radius + 'px');
 
   const fontMap = {
@@ -1448,6 +1454,28 @@ for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv', 'accOv', 'custSet
   $(id).onclick = e => { if (e.target === $(id)) closeOv(id); };
 }
 
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if ($('installAppBtn')) $('installAppBtn').style.display = 'grid';
+});
+
+function triggerInstallApp() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.finally(() => {
+      deferredInstallPrompt = null;
+      if ($('installAppBtn')) $('installAppBtn').style.display = 'none';
+    });
+  } else {
+    alert(lang === 'en'
+      ? 'To install on your device: open browser menu (Share / ⋮) and choose "Add to Home Screen" or "Install App".'
+      : 'لتثبيت المتجر كتطبيق على جهازك: افتح قائمة المتصفح (زر المشاركة ⬆️ أو القائمة ⋮) واختر "إضافة إلى الشاشة الرئيسية" أو "تثبيت التطبيق".');
+  }
+}
+if ($('installAppBtn')) $('installAppBtn').onclick = triggerInstallApp;
+
 $('custSetBtn').onclick = () => {
   const curTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   const curCols = localStorage.getItem('line_grid') || 'auto';
@@ -1469,8 +1497,11 @@ $('custSetBtn').onclick = () => {
       <button type="button" class="btn ${curCols === 'auto' ? '' : 'btn-sec'}" id="setGridAuto">${lang === 'en' ? 'Auto' : 'تلقائي'}</button>
       <button type="button" class="btn ${curCols === '2' ? '' : 'btn-sec'}" id="setGrid2">${lang === 'en' ? '2 Columns' : 'عمودان (كبير)'}</button>
     </div>
-    <button type="button" class="btn btn-sec" id="clrCacheBtn" style="margin-top:16px">🔄 ${lang === 'en' ? 'Refresh Store Cache' : 'تحديث بيانات المتجر المحفوظة'}</button>`;
+    <button type="button" class="btn btn-sec" id="clrCacheBtn" style="margin-top:16px">🔄 ${lang === 'en' ? 'Refresh Store Cache' : 'تحديث بيانات المتجر المحفوظة'}</button>
+    <button type="button" class="btn" id="modalInstallBtn" style="margin-top:8px">📲 ${lang === 'en' ? 'Download / Install App' : 'تحميل وتثبيت الموقع كتطبيق'}</button>`;
   $('custSetOv').classList.add('open');
+
+  $('modalInstallBtn').onclick = () => { closeOv('custSetOv'); triggerInstallApp(); };
 
   $('setLangAr').onclick = () => { applyLang('ar'); $('custSetBtn').click(); };
   $('setLangEn').onclick = () => { applyLang('en'); $('custSetBtn').click(); };
