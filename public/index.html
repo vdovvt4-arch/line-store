@@ -219,6 +219,7 @@ let orderFilter = 'all';
 let orderQuery = '';
 let prodQuery = '';
 let invFilter = 'all';
+let invQuery = '';
 let finPeriod = 'all';
 
 const fmt = n => Number(n || 0).toLocaleString('en') + ' ' + (D.settings.currency || 'د.ع');
@@ -979,6 +980,7 @@ function renderInventory() {
   const totalPieces = D.products.reduce((s, p) => s + p.stock, 0);
 
   const list = D.products.filter(p => {
+    if (invQuery && !(p.name + ' ' + p.category).toLowerCase().includes(invQuery.toLowerCase())) return false;
     if (invFilter === 'avail') return !p.sold_out && p.stock > 0;
     if (invFilter === 'low') return p.low_stock;
     if (invFilter === 'out') return p.sold_out || p.stock <= 0;
@@ -994,19 +996,20 @@ function renderInventory() {
     </div>
 
     <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span class="muted">تصفية المخزن:</span>
+      <input id="invSearch" value="${esc(invQuery)}" placeholder="بحث في المخزن بالاسم أو التصنيف..." style="flex:1;min-width:190px">
       <button class="btn btn-sm ${invFilter === 'all' ? '' : 'btn-sec'}" data-inv-f="all" type="button">الكل</button>
       <button class="btn btn-sm ${invFilter === 'avail' ? '' : 'btn-sec'}" data-inv-f="avail" type="button">متوفر</button>
-      <button class="btn btn-sm ${invFilter === 'low' ? '' : 'btn-sec'}" data-inv-f="low" type="button">مخزون منخفض</button>
-      <button class="btn btn-sm ${invFilter === 'out' ? '' : 'btn-sec'}" data-inv-f="out" type="button">غير متوفر</button>
+      <button class="btn btn-sm ${invFilter === 'low' ? '' : 'btn-sec'}" data-inv-f="low" type="button">منخفض</button>
+      <button class="btn btn-sm ${invFilter === 'out' ? '' : 'btn-sec'}" data-inv-f="out" type="button">نافد</button>
+      <button class="btn btn-sm" id="saveAllInvBtn" type="button">💾 حفظ كل التعديلات</button>
     </div>
 
     <div class="card tbl-wrap">
       <table>
         <thead>
           <tr>
-            <th>المنتج</th>
-            <th>السعر</th>
+            <th>المنتج والقياسات</th>
+            <th>السعر ورأس المال</th>
             <th>الكمية</th>
             <th>حد التنبيه</th>
             <th>الخصم</th>
@@ -1021,12 +1024,17 @@ function renderInventory() {
                 <strong>${esc(p.name)}</strong>
                 <div class="muted">${esc(p.category)}</div>
                 ${p.sizes.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${p.sizes.map(s => `
-                  <label style="display:inline-flex;align-items:center;gap:4px;margin:0;font-size:11px;background:var(--inp);border:1px solid var(--line);padding:2px 6px;border-radius:8px">
+                  <div style="display:inline-flex;align-items:center;gap:3px;font-size:11px;background:var(--inp);border:1px solid ${s.stock <= 0 ? 'var(--err)' : s.stock <= p.low_stock_threshold ? 'var(--warn)' : 'var(--line)'};padding:2px 6px;border-radius:10px">
                     <span>${esc(s.size)}:</span>
-                    <input type="number" min="0" class="inv-sz-stk" data-sz="${esc(s.size)}" value="${s.stock}" style="width:52px;padding:3px 5px;font-size:12px">
-                  </label>`).join('')}</div>` : ''}
+                    <button type="button" class="btn btn-sec" style="padding:0 6px;min-height:22px;font-size:12px" data-sz-step="-1" data-pid="${p.id}" data-sz="${esc(s.size)}" title="بيع قطعة بالمحل">-</button>
+                    <input type="number" min="0" class="inv-sz-stk" data-sz="${esc(s.size)}" value="${s.stock}" style="width:46px;padding:2px 4px;font-size:12px;text-align:center">
+                    <button type="button" class="btn btn-sec" style="padding:0 6px;min-height:22px;font-size:12px" data-sz-step="1" data-pid="${p.id}" data-sz="${esc(s.size)}" title="إضافة قطعة">+</button>
+                  </div>`).join('')}</div>` : ''}
               </td>
-              <td>${fmt(p.final_price)}</td>
+              <td>
+                <div><strong>${fmt(p.final_price)}</strong></div>
+                <div class="muted" style="font-size:11px">رأس المال: ${fmt((p.cost_price || 0) * p.stock)}</div>
+              </td>
               <td style="min-width:95px"><input type="number" min="0" class="inv-stk" value="${p.stock}" ${p.sizes.length ? 'readonly title="يُحسب تلقائياً من كميات القياسات"' : ''}></td>
               <td style="min-width:85px"><input type="number" min="0" class="inv-low" value="${p.low_stock_threshold}"></td>
               <td style="min-width:185px">
@@ -1050,9 +1058,73 @@ function renderInventory() {
       </table>
     </div>`;
 
+  $('invSearch').oninput = e => {
+    const pos = e.target.selectionStart;
+    invQuery = e.target.value;
+    renderInventory();
+    const inp = $('invSearch');
+    if (inp) { inp.focus(); try { inp.setSelectionRange(pos, pos); } catch {} }
+  };
+
   $('content').querySelectorAll('[data-inv-f]').forEach(b => {
     b.onclick = () => { invFilter = b.dataset.invF; renderInventory(); };
   });
+
+  $('content').querySelectorAll('[data-sz-step]').forEach(b => {
+    b.onclick = async () => {
+      const id = b.dataset.pid;
+      const sz = b.dataset.sz;
+      const delta = Number(b.dataset.szStep);
+      const row = $('content').querySelector(`[data-inv-row="${id}"]`);
+      const szInputs = [...row.querySelectorAll('.inv-sz-stk')];
+      const targetInp = szInputs.find(x => x.dataset.sz === sz);
+      if (!targetInp) return;
+      targetInp.value = Math.max(0, (parseInt(targetInp.value, 10) || 0) + delta);
+      const sum = szInputs.reduce((s, el) => s + Math.max(0, parseInt(el.value, 10) || 0), 0);
+      row.querySelector('.inv-stk').value = sum;
+      try {
+        await api(`/api/admin/products/${id}/inventory`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            stock: sum,
+            sizes: szInputs.map(el => ({ size: el.dataset.sz, stock: Math.max(0, parseInt(el.value, 10) || 0) })),
+          }),
+        });
+        toast(delta < 0 ? `تم خصم 1 من قياس ${sz}` : `تمت إضافة 1 لقياس ${sz}`);
+        await init();
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+
+  $('saveAllInvBtn').onclick = async () => {
+    const rows = [...$('content').querySelectorAll('[data-inv-row]')];
+    if (!rows.length) return;
+    try {
+      await Promise.all(rows.map(row => {
+        const id = row.dataset.invRow;
+        const szInputs = [...row.querySelectorAll('.inv-sz-stk')];
+        const payload = {
+          stock: Number(row.querySelector('.inv-stk').value),
+          low_stock_threshold: Number(row.querySelector('.inv-low').value),
+          discount_type: row.querySelector('.inv-dt').value,
+          discount_value: Number(row.querySelector('.inv-dv').value),
+        };
+        if (szInputs.length) {
+          payload.sizes = szInputs.map(el => ({ size: el.dataset.sz, stock: Math.max(0, parseInt(el.value, 10) || 0) }));
+        }
+        return api(`/api/admin/products/${id}/inventory`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      }));
+      toast('تم حفظ جميع تعديلات المخزن بنجاح ✅');
+      await init();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
 
   $('content').querySelectorAll('[data-toggle-avail]').forEach(b => {
     b.onclick = async () => {
