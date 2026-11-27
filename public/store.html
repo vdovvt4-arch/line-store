@@ -224,14 +224,15 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
       </div>
 
       <nav class="nav-links">
-        <button type="button" class="nav-link" onclick="document.getElementById('cats').scrollIntoView({behavior:'smooth'})">الأقسام</button>
-        <button type="button" class="nav-link" onclick="document.getElementById('sortSel').value='disc';document.getElementById('sortSel').dispatchEvent(new Event('change'));document.getElementById('grid').scrollIntoView({behavior:'smooth'})">العروض</button>
-        <button type="button" class="nav-link" onclick="document.getElementById('servicesSec').scrollIntoView({behavior:'smooth'})">خدماتنا</button>
-        <button type="button" class="nav-link" onclick="document.getElementById('contactSec').scrollIntoView({behavior:'smooth'})">تواصل معنا</button>
+        <button type="button" class="nav-link" id="navCats" onclick="document.getElementById('cats').scrollIntoView({behavior:'smooth'})">الأقسام</button>
+        <button type="button" class="nav-link" id="navOffers" onclick="document.getElementById('sortSel').value='disc';document.getElementById('sortSel').dispatchEvent(new Event('change'));document.getElementById('grid').scrollIntoView({behavior:'smooth'})">العروض</button>
+        <button type="button" class="nav-link" id="navServices" onclick="document.getElementById('servicesSec').scrollIntoView({behavior:'smooth'})">خدماتنا</button>
+        <button type="button" class="nav-link" id="navContact" onclick="document.getElementById('contactSec').scrollIntoView({behavior:'smooth'})">تواصل معنا</button>
       </nav>
 
       <div class="actions">
         <button class="acc-btn" id="accBtn" type="button" title="حسابي">👤 دخول</button>
+        <button class="ico-btn" id="custSetBtn" type="button" title="إعدادات الزبون واللغة">⚙️</button>
         <button class="ico-btn" id="favNavBtn" type="button" title="المفضلة">♡</button>
         <button class="ico-btn" id="cartBtn" type="button" title="السلة">🛒<span class="cart-cnt" id="cartCnt">0</span></button>
         <button class="ico-btn" id="themeBtn" type="button" title="تبديل المظهر">☀️</button>
@@ -276,7 +277,7 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
   <div class="empty" id="empty" style="display:none">لا توجد منتجات مطابقة حالياً</div>
 
   <section id="servicesSec">
-    <div class="sec-head"><h2>خدماتنا</h2></div>
+    <div class="sec-head"><h2 id="secServTitle">خدماتنا</h2></div>
     <div class="info-grid">
       <div class="info-card"><div class="info-ico">🚚</div><strong>توصيل لجميع المحافظات</strong><span>شحن سريع وموثوق لباب البيت في كافة محافظات العراق</span></div>
       <div class="info-card"><div class="info-ico">💵</div><strong>الدفع عند الاستلام</strong><span>افحص طلبك براحتك عند الاستلام قبل الدفع</span></div>
@@ -286,7 +287,7 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
   </section>
 
   <section id="contactSec">
-    <div class="sec-head"><h2>تواصل معنا</h2></div>
+    <div class="sec-head"><h2 id="secContTitle">تواصل معنا</h2></div>
     <div class="info-grid">
       <div class="info-card"><div class="info-ico">📍</div><strong>العنوان</strong><span id="cAddr">-</span></div>
       <div class="info-card"><div class="info-ico">📞</div><strong>خدمة الزبائن</strong><span id="cPhone">-</span></div>
@@ -326,6 +327,7 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
 <div class="overlay" id="orderOv"><div class="modal" id="orderModal"></div></div>
 <div class="overlay" id="trackOv"><div class="modal" id="trackModal"></div></div>
 <div class="overlay" id="accOv"><div class="modal" id="accModal"></div></div>
+<div class="overlay" id="custSetOv"><div class="modal" id="custSetModal"></div></div>
 <a class="float-wa" id="floatWa" target="_blank" rel="noopener">💬 تواصل معنا</a>
 <button class="top-btn" id="topBtn" type="button" title="العودة للأعلى">⬆️</button>
 
@@ -354,6 +356,49 @@ let initialProductHandled = false;
 let custToken = localStorage.getItem('line_cust_token') || '';
 let custUser = null;
 try { custUser = JSON.parse(localStorage.getItem('line_cust_user') || 'null'); } catch {}
+let lang = localStorage.getItem('line_lang') || 'ar';
+const I18N = {
+  ar: {
+    cats: 'الأقسام', offers: 'العروض', services: 'خدماتنا', contact: 'تواصل معنا',
+    track: '📦 تتبع طلبي', searchPh: 'ابحث بذكاء: بدلة، بنطرون، كحلي، تخفيض...',
+    all: 'الكل', favs: '❤️ المفضلة', storeProds: 'تشكيلة المتجر',
+    buy: '🛍️ شراء', unavail: 'غير متوفر', empty: 'لا توجد منتجات مطابقة حالياً',
+    sortNew: 'الأحدث', sortLow: 'الأرخص', sortHigh: 'الأغلى', sortDisc: 'الخصومات',
+    floatWa: '💬 تواصل معنا', login: '👤 دخول',
+  },
+  en: {
+    cats: 'Categories', offers: 'Offers', services: 'Services', contact: 'Contact',
+    track: '📦 Track Order', searchPh: 'Search: suit, shirt, pants, discount...',
+    all: 'All', favs: '❤️ Favorites', storeProds: 'Store Collection',
+    buy: '🛍️ Buy', unavail: 'Out of Stock', empty: 'No matching products found',
+    sortNew: 'Newest', sortLow: 'Price: Low', sortHigh: 'Price: High', sortDisc: 'Discounts',
+    floatWa: '💬 Chat on WhatsApp', login: '👤 Sign In',
+  },
+};
+const t = k => (I18N[lang] || I18N.ar)[k] || I18N.ar[k] || k;
+function applyLang(nextLang) {
+  lang = nextLang === 'en' ? 'en' : 'ar';
+  localStorage.setItem('line_lang', lang);
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'en' ? 'ltr' : 'rtl';
+  $('navCats').textContent = t('cats');
+  $('navOffers').textContent = t('offers');
+  $('navServices').textContent = t('services');
+  $('navContact').textContent = t('contact');
+  $('secServTitle').textContent = t('services');
+  $('secContTitle').textContent = t('contact');
+  $('trackBtn').textContent = t('track');
+  $('q').placeholder = t('searchPh');
+  $('empty').textContent = t('empty');
+  $('floatWa').textContent = t('floatWa');
+  const opts = $('sortSel').options;
+  if (opts[0]) opts[0].text = t('sortNew');
+  if (opts[1]) opts[1].text = t('sortLow');
+  if (opts[2]) opts[2].text = t('sortHigh');
+  if (opts[3]) opts[3].text = t('sortDisc');
+  renderAccBtn();
+  if (S.products && S.products.length) { renderCats(); renderGrid(); }
+}
 
 function toggleFav(id) {
   const num = Number(id);
@@ -599,9 +644,9 @@ function renderSlider(slides) {
 }
 
 function renderCats() {
-  const favLabel = `❤️ المفضلة${favs.length ? ` (${favs.length})` : ''}`;
+  const favLabel = `${t('favs')}${favs.length ? ` (${favs.length})` : ''}`;
   const cats = ['الكل', '❤️ المفضلة', ...new Set(S.products.map(p => p.category).filter(Boolean))];
-  $('cats').innerHTML = cats.map(c => `<button class="chip ${c === cat ? 'on' : ''}" data-c="${esc(c)}">${esc(c === '❤️ المفضلة' ? favLabel : c)}</button>`).join('');
+  $('cats').innerHTML = cats.map(c => `<button class="chip ${c === cat ? 'on' : ''}" data-c="${esc(c)}">${esc(c === '❤️ المفضلة' ? favLabel : c === 'الكل' ? t('all') : c)}</button>`).join('');
 }
 
 $('cats').onclick = e => {
@@ -784,24 +829,28 @@ function renderGrid() {
   if (sortBy === 'high') items.sort((a, b) => b.final_price - a.final_price);
   if (sortBy === 'disc') items.sort((a, b) => (b.final_price < b.price) - (a.final_price < a.price));
 
-  $('secProdTitle').textContent = cat === 'الكل' ? 'تشكيلة المتجر' : cat;
+  $('secProdTitle').textContent = cat === 'الكل' ? t('storeProds') : cat === '❤️ المفضلة' ? t('favs') : cat;
   $('empty').style.display = items.length ? 'none' : 'block';
   $('grid').innerHTML = items.map(p => {
     const unavail = p.sold_out || p.stock <= 0;
+    const revHtml = p.reviews_count > 0
+      ? `<div style="font-size:11.5px;color:var(--amber);font-weight:700;margin-bottom:4px">★ ${p.avg_rating} <span class="muted">(${p.reviews_count})</span></div>`
+      : '';
     return `
       <div class="card" data-id="${p.id}">
         <div class="img">
           <button type="button" class="fav-btn ${favs.includes(p.id) ? 'on' : ''}" data-fav="${p.id}" title="إضافة للمفضلة">${favs.includes(p.id) ? '♥' : '♡'}</button>
-          ${unavail ? '<span class="soldtag">غير متوفر</span>' : p.low_stock ? '<span class="soldtag" style="background:var(--amber);color:#111;font-weight:800">🔥 متبقي ' + p.stock + '</span>' : ''}
+          ${unavail ? `<span class="soldtag">${t('unavail')}</span>` : p.low_stock ? '<span class="soldtag" style="background:var(--amber);color:#111;font-weight:800">🔥 متبقي ' + p.stock + '</span>' : ''}
           ${p.images[0] ? `<img src="${p.images[0]}" alt="${esc(p.name)}" loading="lazy" decoding="async">` : `<div class="placeholder-art"><span>👔</span><span>${esc(p.category || 'ملابس رجالية')}</span></div>`}
         </div>
         <div class="body">
           ${p.category ? `<div class="cat-tag">${esc(p.category)}</div>` : ''}
           <div class="name">${esc(p.name)}</div>
+          ${revHtml}
           <div style="margin-bottom:6px">${priceHTML(p)}</div>
           ${stockBadgeHTML(p)}
           <div class="card-acts">
-            <button class="btn-buy" type="button">${unavail ? 'غير متوفر' : '🛍️ شراء'}</button>
+            <button class="btn-buy" type="button">${unavail ? t('unavail') : t('buy')}</button>
             ${S.settings.enable_cart !== false ? `<button class="btn-cart-ico" type="button" data-quick-cart="${p.id}" title="أضف للسلة" ${unavail ? 'disabled' : ''}>🛒</button>` : ''}
           </div>
         </div>
@@ -906,9 +955,96 @@ function openProduct(p) {
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
       ${S.settings.whatsapp ? `<button class="chip" type="button" id="waOrderBtn" style="flex:1;justify-content:center" ${unavail ? 'disabled' : ''}>💬 طلب سريع عبر واتساب</button>` : ''}
       <button class="chip" type="button" id="shareProdBtn" style="flex:1;justify-content:center">🔗 مشاركة المنتج</button>
+    </div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <strong style="font-size:15px">⭐ تقييمات وآراء الزبائن</strong>
+        <span id="revSummary" class="muted"></span>
+      </div>
+      <div style="background:var(--inp);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+          <span class="muted">تقييمك:</span>
+          <div id="starPicker" style="display:flex;gap:4px;font-size:20px;cursor:pointer;color:var(--amber)">
+            ${[1,2,3,4,5].map(n => `<span data-star="${n}">★</span>`).join('')}
+          </div>
+        </div>
+        <div class="row">
+          <input id="revName" placeholder="اسمك" value="${esc(custUser?.name || '')}">
+          <input id="revComment" placeholder="اكتب رأيك بالمنتج...">
+        </div>
+        <button class="btn btn-sec" id="revSubmitBtn" type="button" style="margin-top:8px;padding:8px">إرسال التقييم</button>
+        <div id="revMsg" style="margin-top:6px"></div>
+      </div>
+      <div id="revList"><div class="muted">جاري تحميل التقييمات...</div></div>
     </div>`;
   updateSizeHint();
+  loadProductReviews(p.id);
   $('productOv').classList.add('open');
+}
+
+let pickedStars = 5;
+async function loadProductReviews(productId) {
+  pickedStars = 5;
+  const paintStars = () => {
+    $('starPicker')?.querySelectorAll('[data-star]').forEach(el => {
+      el.textContent = Number(el.dataset.star) <= pickedStars ? '★' : '☆';
+    });
+  };
+  paintStars();
+  if ($('starPicker')) {
+    $('starPicker').onclick = e => {
+      const s = e.target.closest('[data-star]');
+      if (!s) return;
+      pickedStars = Number(s.dataset.star);
+      paintStars();
+    };
+  }
+  if ($('revSubmitBtn')) {
+    $('revSubmitBtn').onclick = async () => {
+      $('revMsg').innerHTML = '';
+      try {
+        const r = await fetch(`/api/products/${productId}/reviews`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_name: $('revName').value,
+            rating: pickedStars,
+            comment: $('revComment').value,
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok) { $('revMsg').innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+        $('revComment').value = '';
+        $('revMsg').innerHTML = '<div class="ok-msg">شكراً لتقييمك! تم نشر رأيك بنجاح ✅</div>';
+        renderReviewsData(d);
+        const target = S.products.find(x => x.id === productId);
+        if (target) { target.avg_rating = d.avg_rating; target.reviews_count = d.count; renderGrid(); }
+      } catch {
+        $('revMsg').innerHTML = '<div class="err">تعذر إرسال التقييم</div>';
+      }
+    };
+  }
+  try {
+    const r = await fetch(`/api/products/${productId}/reviews`);
+    if (r.ok) renderReviewsData(await r.json());
+  } catch {
+    if ($('revList')) $('revList').innerHTML = '<div class="muted">لا توجد تقييمات بعد.</div>';
+  }
+}
+
+function renderReviewsData(d) {
+  if (!$('revList')) return;
+  $('revSummary').textContent = d.count ? `★ ${d.avg_rating} (${d.count} تقييم)` : 'كن أول من يقيّم';
+  $('revList').innerHTML = (d.reviews || []).length
+    ? d.reviews.map(rv => `
+        <div style="padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong>${esc(rv.customer_name)}</strong>
+            <span style="color:var(--amber)">${'★'.repeat(rv.rating)}${'☆'.repeat(5 - rv.rating)}</span>
+          </div>
+          ${rv.comment ? `<div class="muted" style="margin-top:3px">${esc(rv.comment)}</div>` : ''}
+        </div>`).join('')
+    : '<div class="muted">لا توجد تقييمات لهذا المنتج بعد.</div>';
 }
 
 function updateSizeHint() {
@@ -1234,7 +1370,10 @@ function openOrder(fromCart) {
         cart = [];
         saveCart();
       }
-      await load();
+      await applyLang(lang);
+const savedGrid = localStorage.getItem('line_grid');
+if (savedGrid === '2') $('grid').className = 'grid c2';
+load();
       $('orderModal').innerHTML = `
         <button class="close" onclick="closeOv('orderOv')">×</button>
         <div style="text-align:center;padding:20px 10px">
@@ -1305,9 +1444,49 @@ $('trackBtn').onclick = () => {
   };
 };
 
-for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv', 'accOv']) {
+for (const id of ['productOv', 'cartOv', 'orderOv', 'trackOv', 'accOv', 'custSetOv']) {
   $(id).onclick = e => { if (e.target === $(id)) closeOv(id); };
 }
+
+$('custSetBtn').onclick = () => {
+  const curTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const curCols = localStorage.getItem('line_grid') || 'auto';
+  $('custSetModal').innerHTML = `
+    <button class="close" onclick="closeOv('custSetOv')">×</button>
+    <h2 style="margin-top:0">${lang === 'en' ? 'Store Preferences' : '⚙️ إعدادات المتجر للزبون'}</h2>
+    <label>${lang === 'en' ? 'Language / اللغة' : 'اللغة / Language'}</label>
+    <div class="row">
+      <button type="button" class="btn ${lang === 'ar' ? '' : 'btn-sec'}" id="setLangAr">🇮🇶 العربية</button>
+      <button type="button" class="btn ${lang === 'en' ? '' : 'btn-sec'}" id="setLangEn">🇺🇸 English</button>
+    </div>
+    <label>${lang === 'en' ? 'Theme' : 'المظهر'}</label>
+    <div class="row">
+      <button type="button" class="btn ${curTheme === 'dark' ? '' : 'btn-sec'}" id="setThemeDark">🌙 ${lang === 'en' ? 'Dark' : 'داكن'}</button>
+      <button type="button" class="btn ${curTheme === 'light' ? '' : 'btn-sec'}" id="setThemeLight">☀️ ${lang === 'en' ? 'Light' : 'صباحي'}</button>
+    </div>
+    <label>${lang === 'en' ? 'Product Grid' : 'عرض المنتجات'}</label>
+    <div class="row">
+      <button type="button" class="btn ${curCols === 'auto' ? '' : 'btn-sec'}" id="setGridAuto">${lang === 'en' ? 'Auto' : 'تلقائي'}</button>
+      <button type="button" class="btn ${curCols === '2' ? '' : 'btn-sec'}" id="setGrid2">${lang === 'en' ? '2 Columns' : 'عمودان (كبير)'}</button>
+    </div>
+    <button type="button" class="btn btn-sec" id="clrCacheBtn" style="margin-top:16px">🔄 ${lang === 'en' ? 'Refresh Store Cache' : 'تحديث بيانات المتجر المحفوظة'}</button>`;
+  $('custSetOv').classList.add('open');
+
+  $('setLangAr').onclick = () => { applyLang('ar'); $('custSetBtn').click(); };
+  $('setLangEn').onclick = () => { applyLang('en'); $('custSetBtn').click(); };
+  $('setThemeDark').onclick = () => { localStorage.setItem('line_theme', 'dark'); applyTheme('dark'); $('custSetBtn').click(); };
+  $('setThemeLight').onclick = () => { localStorage.setItem('line_theme', 'light'); applyTheme('light'); $('custSetBtn').click(); };
+  $('setGridAuto').onclick = () => { localStorage.setItem('line_grid', 'auto'); $('grid').className = 'grid'; $('custSetBtn').click(); };
+  $('setGrid2').onclick = () => { localStorage.setItem('line_grid', '2'); $('grid').className = 'grid c2'; $('custSetBtn').click(); };
+  $('clrCacheBtn').onclick = async () => {
+    localStorage.removeItem('line_store_cache');
+    await applyLang(lang);
+const savedGrid = localStorage.getItem('line_grid');
+if (savedGrid === '2') $('grid').className = 'grid c2';
+load();
+    closeOv('custSetOv');
+  };
+};
 
 function renderAccBtn() {
   const b = $('accBtn');
@@ -1450,6 +1629,9 @@ window.addEventListener('scroll', () => {
 });
 $('topBtn').onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
+applyLang(lang);
+const savedGrid = localStorage.getItem('line_grid');
+if (savedGrid === '2') $('grid').className = 'grid c2';
 load();
 </script>
 </body>

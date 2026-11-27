@@ -191,6 +191,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'orders', label: 'الطلبات', icon: '🛍️' },
       { id: 'customers', label: 'الزبائن', icon: '👥' },
+      { id: 'reviews', label: 'تقييمات الزبائن', icon: '⭐' },
     ],
   },
   {
@@ -437,6 +438,7 @@ function renderTab() {
   if (curTab === 'inventory') renderInventory();
   if (curTab === 'coupons') renderCoupons();
   if (curTab === 'customers') renderCustomers();
+  if (curTab === 'reviews') renderReviews();
   if (curTab === 'settings') renderSettings();
 }
 
@@ -1389,6 +1391,40 @@ function renderCustomers() {
           body: JSON.stringify({ email: b.dataset.vipEmail, is_vip: b.dataset.vipCur !== '1' }),
         });
         toast('تم تحديث قائمة المشهورين');
+        await init();
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+}
+
+function renderReviews() {
+  const list = D.reviews || [];
+  $('content').innerHTML = `
+    <div class="card tbl-wrap">
+      <h2>تقييمات وآراء الزبائن (${list.length})</h2>
+      <table>
+        <thead><tr><th>المنتج</th><th>الزبون</th><th>التقييم</th><th>التعليق</th><th>حذف</th></tr></thead>
+        <tbody>
+          ${list.map(r => `
+            <tr>
+              <td><strong>${esc(r.product_name || '#' + r.product_id)}</strong></td>
+              <td>${esc(r.customer_name)}</td>
+              <td style="color:var(--warn);font-weight:800">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</td>
+              <td>${esc(r.comment || '-')}</td>
+              <td><button type="button" class="btn btn-sm btn-del" data-del-rev="${r.id}">حذف</button></td>
+            </tr>`).join('') || '<tr><td colspan="5" class="muted">لا توجد تقييمات بعد.</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+
+  $('content').querySelectorAll('[data-del-rev]').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('حذف هذا التقييم؟')) return;
+      try {
+        await api('/api/admin/reviews/' + b.dataset.delRev, { method: 'DELETE' });
+        toast('تم حذف التقييم');
         await init();
       } catch (e) {
         alert(e.message);
