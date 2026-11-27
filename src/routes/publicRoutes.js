@@ -3,6 +3,7 @@ const productRepo = require('../db/repositories/productRepo');
 const orderRepo = require('../db/repositories/orderRepo');
 const customerRepo = require('../db/repositories/customerRepo');
 const customerAccountRepo = require('../db/repositories/customerAccountRepo');
+const reviewRepo = require('../db/repositories/reviewRepo');
 const couponRepo = require('../db/repositories/couponRepo');
 const settingsRepo = require('../db/repositories/settingsRepo');
 const { createCustomerToken, getCustomerFromReq } = require('../middleware/auth');
@@ -16,16 +17,47 @@ async function handlePublicRoutes(req, res, method, pathname, url) {
   }
 
   if (method === 'GET' && pathname === '/api/store') {
-    const [settings, rawProducts, vipAccountNames] = await Promise.all([
+    const [settings, rawProducts, vipAccountNames, reviewStats] = await Promise.all([
       settingsRepo.get(),
       productRepo.findPublished(),
       customerAccountRepo.findVipNames(),
+      reviewRepo.getStatsByProduct(),
     ]);
-    const products = settings.hide_sold_out
+    const products = (settings.hide_sold_out
       ? rawProducts.filter(p => !p.sold_out)
-      : rawProducts;
+      : rawProducts
+    ).map(p => {
+      const rs = reviewStats.get(p.id) || { count: 0, avg_rating: 0 };
+      return { ...p, reviews_count: rs.count, avg_rating: rs.avg_rating };
+    });
     const vip_names = [...new Set([...(settings.vip_customers || []), ...vipAccountNames])];
     return json(res, 200, { settings: { ...settings, vip_names }, products });
+  }
+
+  const revMatch = pathname.match(/^\/api\/products\/(\d+)\/reviews$/);
+  if (revMatch) {
+    const productId = Number(revMatch[1]);
+    if (method === 'GET') {
+      return json(res, 200, await reviewRepo.findByProductId(productId));
+    }
+    if (method === 'POST') {
+      if (!rateLimit(req, 'review', 10, 600000)) {
+        throw new AppError(429, 'محاولات كثيرة، حاول بعد قليل');
+      }
+      const product = await productRepo.findPublishedById(productId);
+      if (!product) throw new AppError(404, 'المنتج غير موجود');
+      const b = await readBody(req);
+      const name = String(b.customer_name || '').trim();
+      if (name.length < 2) throw new AppError(400, 'الرجاء كتابة اسمك');
+      const review = await reviewRepo.create({
+        product_id: productId,
+        customer_name: name,
+        rating: b.rating,
+        comment: b.comment,
+      });
+      const stats = await reviewRepo.findByProductId(productId);
+      return json(res, 201, { review, ...stats });
+    }
   }
 
   if (method === 'POST' && pathname === '/api/auth/google') {

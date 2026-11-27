@@ -4,6 +4,7 @@ const productRepo = require('../db/repositories/productRepo');
 const orderRepo = require('../db/repositories/orderRepo');
 const customerRepo = require('../db/repositories/customerRepo');
 const customerAccountRepo = require('../db/repositories/customerAccountRepo');
+const reviewRepo = require('../db/repositories/reviewRepo');
 const couponRepo = require('../db/repositories/couponRepo');
 const expenseRepo = require('../db/repositories/expenseRepo');
 const settingsRepo = require('../db/repositories/settingsRepo');
@@ -32,11 +33,12 @@ async function handleAdminRoutes(req, res, method, pathname) {
   }
 
   if (method === 'GET' && pathname === '/api/admin/bootstrap') {
-    const [products, orders, customers, customerAccounts, coupons, expenses, settings] = await Promise.all([
+    const [products, orders, customers, customerAccounts, reviews, coupons, expenses, settings] = await Promise.all([
       productRepo.findAll(),
       orderRepo.findAll(),
       customerRepo.findAllWithStats(),
       customerAccountRepo.findAll(),
+      reviewRepo.findAll(),
       couponRepo.findAll(),
       expenseRepo.findAll(),
       settingsRepo.get(),
@@ -46,11 +48,18 @@ async function handleAdminRoutes(req, res, method, pathname) {
       orders,
       customers,
       customerAccounts,
+      reviews,
       coupons,
       expenses,
       settings,
       governorates: GOVERNORATES,
     });
+  }
+
+  const revDelMatch = pathname.match(/^\/api\/admin\/reviews\/(\d+)$/);
+  if (revDelMatch && method === 'DELETE') {
+    await reviewRepo.remove(Number(revDelMatch[1]));
+    return json(res, 200, { ok: true });
   }
 
   if (method === 'PATCH' && pathname === '/api/admin/customer-accounts/vip') {
