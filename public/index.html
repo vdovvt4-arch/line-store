@@ -427,7 +427,17 @@ function calcFinance(period = 'all') {
   const elecExp = periodExpenses.filter(e => e.category === 'electricity').reduce((s, e) => s + Number(e.amount || 0), 0);
   const netProfit = grossProfit - totalExpenses;
   const margin = salesNet > 0 ? Math.round((netProfit / salesNet) * 100) : 0;
-  return { activeOrders, periodOrders, periodExpenses, salesNet, cogs, grossProfit, totalExpenses, rentExp, elecExp, netProfit, margin };
+  const deliveredProfit = activeOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.profit || 0), 0);
+  const pendingProfit = grossProfit - deliveredProfit;
+  const invCost = (D.products || []).reduce((s, p) => s + (Number(p.cost_price || 0) * Number(p.stock || 0)), 0);
+  const invRetail = (D.products || []).reduce((s, p) => s + (Number(p.final_price || 0) * Number(p.stock || 0)), 0);
+  const invProfit = invRetail - invCost;
+  const expCoverage = totalExpenses > 0 ? Math.min(100, Math.round((Math.max(0, grossProfit) / totalExpenses) * 100)) : 100;
+  return {
+    activeOrders, periodOrders, periodExpenses, salesNet, cogs, grossProfit,
+    totalExpenses, rentExp, elecExp, netProfit, margin,
+    deliveredProfit, pendingProfit, invCost, invRetail, invProfit, expCoverage,
+  };
 }
 
 function renderTab() {
@@ -553,12 +563,37 @@ function renderFinance() {
       <div class="kpi"><div class="muted">صافي الربح النهائي (${f.margin}%)</div><div class="val" style="color:${f.netProfit >= 0 ? 'var(--ok)' : 'var(--err)'}">${fmt(f.netProfit)}</div></div>
     </div>
 
+    <div class="card" style="border-color:color-mix(in srgb,var(--g1) 45%,var(--line))">
+      <h2>🧠 التحليل المالي الذكي ورأس المال</h2>
+      <div class="row3">
+        <div style="background:var(--inp);border:1px solid var(--line);border-radius:14px;padding:12px">
+          <div class="muted">رأس مال المخزن الحالي (التكلفة)</div>
+          <strong style="font-size:18px">${fmt(f.invCost)}</strong>
+          <div class="muted" style="font-size:11.5px;margin-top:4px">قيمة البيع المتوقعة: ${fmt(f.invRetail)}</div>
+        </div>
+        <div style="background:var(--inp);border:1px solid var(--line);border-radius:14px;padding:12px">
+          <div class="muted">الربح المتوقع من المخزن الحالي</div>
+          <strong style="font-size:18px;color:var(--ok)">+${fmt(f.invProfit)}</strong>
+          <div class="muted" style="font-size:11.5px;margin-top:4px">أرباح محصلة: ${fmt(f.deliveredProfit)} · معلقة: ${fmt(f.pendingProfit)}</div>
+        </div>
+        <div style="background:var(--inp);border:1px solid var(--line);border-radius:14px;padding:12px">
+          <div class="muted">تغطية المصاريف من الأرباح</div>
+          <strong style="font-size:18px;color:${f.expCoverage >= 100 ? 'var(--ok)' : 'var(--warn)'}">${f.expCoverage}%</strong>
+          <div style="height:6px;border-radius:99px;background:var(--card2);margin-top:6px;overflow:hidden">
+            <div style="height:100%;width:${f.expCoverage}%;background:${f.expCoverage >= 100 ? 'var(--ok)' : 'var(--warn)'}"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h2>إضافة مصروف (إيجار، كهرباء، رواتب...)</h2>
       <div class="preset-row" style="margin-bottom:10px">
-        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="إيجار المحل الشهري,rent">+ تعبئة إيجار المحل</button>
-        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="فاتورة الكهرباء والمولدة,electricity">+ تعبئة فاتورة الكهرباء</button>
-        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="رواتب الموظفين,salary">+ تعبئة رواتب</button>
+        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="إيجار المحل الشهري,rent">+ إيجار المحل</button>
+        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="فاتورة الكهرباء والمولدة,electricity">+ فاتورة الكهرباء</button>
+        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="رواتب الموظفين,salary">+ رواتب</button>
+        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="إعلانات وترويج فيسبوك/انستغرام,marketing">+ إعلانات</button>
+        <button type="button" class="btn btn-sec btn-sm" data-exp-pre="أكياس وتغليف ونقل,other">+ تغليف ونقل</button>
       </div>
       <div class="row3">
         <div><label>عنوان المصروف</label><input id="eTitle" placeholder="مثال: فاتورة الكهرباء"></div>
@@ -1202,6 +1237,16 @@ function openProductForm(p = null) {
   $('modalBody').innerHTML = `
     <button class="close" onclick="closeModal()">×</button>
     <h2 style="margin-top:0">${p && p.id ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h2>
+    ${!(p && p.id) ? `
+      <div style="margin-bottom:10px">
+        <div class="muted" style="font-size:12px;margin-bottom:6px">⚡ تعبئة سريعة حسب نوع القطعة (تملأ القياسات والألوان تلقائياً):</div>
+        <div class="preset-row" style="margin-top:0">
+          <button type="button" class="btn btn-sec btn-sm" data-tpl="suit">👔 بدلة رسمية</button>
+          <button type="button" class="btn btn-sec btn-sm" data-tpl="shirt">👕 قميص</button>
+          <button type="button" class="btn btn-sec btn-sm" data-tpl="pants">👖 بنطلون</button>
+          <button type="button" class="btn btn-sec btn-sm" data-tpl="polo">👕 تيشيرت / بولو</button>
+        </div>
+      </div>` : ''}
     <div class="row">
       <div><label>اسم المنتج</label><input id="pName" value="${esc(p?.name || '')}"></div>
       <div><label>التصنيف</label><input id="pCat" value="${esc(p?.category || '')}" placeholder="مثال: بدلات، قمصان، بنطلونات"></div>
@@ -1212,6 +1257,7 @@ function openProductForm(p = null) {
       <div><label>سعر البيع</label><input id="pPrice" type="number" value="${p?.price || 0}"></div>
       <div><label>سعر التكلفة (رأس المال)</label><input id="pCost" type="number" value="${p?.cost_price || 0}"></div>
     </div>
+    <div id="pProfitPreview" style="margin-top:6px;padding:8px 12px;border-radius:10px;background:var(--inp);border:1px solid var(--line);font-size:12.5px"></div>
     <div class="row">
       <div>
         <label>نوع الخصم</label>
@@ -1287,6 +1333,68 @@ function openProductForm(p = null) {
 
   renderThumbs();
   renderSizes();
+
+  const updateProfitPreview = () => {
+    const pr = Math.max(0, Number($('pPrice').value) || 0);
+    const co = Math.max(0, Number($('pCost').value) || 0);
+    const dt = $('pDiscT').value;
+    const dv = Math.max(0, Number($('pDiscV').value) || 0);
+    const fin = dt === 'percent' ? Math.max(0, Math.round(pr * (1 - Math.min(dv, 100) / 100)))
+      : dt === 'fixed' ? Math.max(0, pr - dv) : pr;
+    const prof = fin - co;
+    const pct = fin > 0 ? Math.round((prof / fin) * 100) : 0;
+    $('pProfitPreview').innerHTML = `السعر النهائي: <strong>${fmt(fin)}</strong> · صافي الربح للقطعة: <strong style="color:${prof >= 0 ? 'var(--ok)' : 'var(--err)'}">${fmt(prof)} (${pct}%)</strong>`;
+  };
+  ['pPrice', 'pCost', 'pDiscT', 'pDiscV'].forEach(id => { $(id).oninput = updateProfitPreview; $(id).onchange = updateProfitPreview; });
+  updateProfitPreview();
+
+  const CLOTH_TPLS = {
+    suit: {
+      cat: 'بدلات رسمية', colors: 'كحلي، أسود، رمادي غامق',
+      sizes: [
+        { size: '48 (M)', stock: 4, chest: '98', waist: '84', length: '73', shoulder: '44', sleeve: '62' },
+        { size: '50 (L)', stock: 5, chest: '104', waist: '90', length: '75', shoulder: '46', sleeve: '63' },
+        { size: '52 (XL)', stock: 3, chest: '110', waist: '96', length: '77', shoulder: '48', sleeve: '64' },
+      ],
+    },
+    shirt: {
+      cat: 'قمصان', colors: 'أبيض، أسود، سماوي، بيج',
+      sizes: [
+        { size: 'M', stock: 6, chest: '102', waist: '96', length: '72', shoulder: '44', sleeve: '61' },
+        { size: 'L', stock: 8, chest: '108', waist: '102', length: '74', shoulder: '46', sleeve: '63' },
+        { size: 'XL', stock: 5, chest: '114', waist: '108', length: '76', shoulder: '48', sleeve: '65' },
+      ],
+    },
+    pants: {
+      cat: 'بنطلونات', colors: 'أسود، كحلي، رمادي، بيج',
+      sizes: [
+        { size: '30', stock: 4, chest: '-', waist: '78', length: '102', shoulder: '-', sleeve: '-' },
+        { size: '32', stock: 5, chest: '-', waist: '83', length: '104', shoulder: '-', sleeve: '-' },
+        { size: '34', stock: 4, chest: '-', waist: '88', length: '105', shoulder: '-', sleeve: '-' },
+        { size: '36', stock: 3, chest: '-', waist: '93', length: '106', shoulder: '-', sleeve: '-' },
+      ],
+    },
+    polo: {
+      cat: 'تيشيرتات', colors: 'أسود، أبيض، كحلي، عنابي',
+      sizes: [
+        { size: 'M', stock: 6, chest: '100', waist: '96', length: '70', shoulder: '43', sleeve: '22' },
+        { size: 'L', stock: 7, chest: '106', waist: '102', length: '72', shoulder: '45', sleeve: '23' },
+        { size: 'XL', stock: 5, chest: '112', waist: '108', length: '74', shoulder: '47', sleeve: '24' },
+      ],
+    },
+  };
+  $('modalBody').querySelectorAll('[data-tpl]').forEach(b => {
+    b.onclick = () => {
+      const tpl = CLOTH_TPLS[b.dataset.tpl];
+      if (!tpl) return;
+      $('pCat').value = tpl.cat;
+      $('pColors').value = tpl.colors;
+      sizes.splice(0, sizes.length, ...tpl.sizes.map(x => ({ ...x })));
+      renderSizes();
+      $('pStock').value = sizes.reduce((sum, x) => sum + (Number(x.stock) || 0), 0);
+      toast('تمت تعبئة القالب بنجاح');
+    };
+  });
 
   $('addSzBtn').onclick = () => {
     sizes.push({ size: '', stock: 5, chest: '', waist: '', length: '', shoulder: '', sleeve: '' });
