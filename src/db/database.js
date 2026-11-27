@@ -329,6 +329,9 @@ async function initDatabase() {
 }
 
 async function seedIfEmpty() {
+  const initRow = await queryGet("SELECT value FROM settings WHERE key='initialized'");
+  if (initRow) return;
+
   const prodRow = await queryGet('SELECT COUNT(*) AS count FROM products');
   if (Number(prodRow?.count || 0) === 0) {
     const sampleProducts = [
@@ -448,6 +451,11 @@ async function seedIfEmpty() {
       ['فاتورة الكهرباء والمولدة', 'electricity', 150000, 'كهرباء شهرية']
     );
   }
+
+  await execute(
+    `INSERT INTO settings(key, value) VALUES('initialized', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+    [isPg ? JSON.stringify('true') : 'true']
+  );
 }
 
 async function closeDatabase() {
