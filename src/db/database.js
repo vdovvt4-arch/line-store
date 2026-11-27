@@ -180,6 +180,14 @@ const PG_SCHEMA = `
     is_vip BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
+  CREATE TABLE IF NOT EXISTS reviews (
+    id SERIAL PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    customer_name TEXT NOT NULL,
+    rating INTEGER NOT NULL DEFAULT 5,
+    comment TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT DEFAULT '';
 `;
 
@@ -266,6 +274,14 @@ const SQLITE_SCHEMA = `
     governorate TEXT DEFAULT '',
     address TEXT DEFAULT '',
     is_vip BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS reviews (
+    id SERIAL PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    customer_name TEXT NOT NULL,
+    rating INTEGER NOT NULL DEFAULT 5,
+    comment TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW()
   );
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT DEFAULT '';
