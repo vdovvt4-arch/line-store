@@ -71,8 +71,16 @@ main{flex:1;padding-bottom:34px}
 .hero h2{margin:0 0 4px;font-size:21px}
 .hero p{margin:0;color:var(--mut);font-size:13.5px}
 .slider{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);margin:16px 0;box-shadow:var(--shadow);background:var(--card)}
-.slide{display:none;position:relative;min-height:300px;align-items:center;padding:34px 58px;background:linear-gradient(135deg,color-mix(in srgb,var(--g1) 32%,var(--card)),color-mix(in srgb,var(--g2) 22%,var(--card)))}
+.slide{display:none;position:relative;min-height:310px;align-items:center;padding:34px 58px;background:linear-gradient(135deg,color-mix(in srgb,var(--g1) 32%,var(--card)),color-mix(in srgb,var(--g2) 22%,var(--card)))}
+.slider.h-compact .slide{min-height:220px}
+.slider.h-tall .slide{min-height:400px}
 .slide.on{display:flex;animation:slideFade .5s ease}
+.slider.ef-zoom .slide.on{animation:slideZoom .55s ease}
+.slider.ef-slide .slide.on{animation:slidePush .45s ease}
+@keyframes slideZoom{from{opacity:.3;transform:scale(1.06)}to{opacity:1;transform:scale(1)}}
+@keyframes slidePush{from{opacity:.4;transform:translateX(-28px)}to{opacity:1;transform:translateX(0)}}
+.slide-cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;padding:9px 18px;border-radius:var(--btn-rad);background:var(--g1);color:#fff;font:700 13.5px var(--font);text-decoration:none;border:0;cursor:pointer;transition:.15s}
+.slide-cta:hover{opacity:.92;transform:translateY(-1px)}
 .slide-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.45;animation:kenburns 9s ease-in-out infinite alternate}
 .slide-content{position:relative;z-index:2;max-width:600px}
 .slide-badge{display:inline-block;background:var(--amber);color:#111;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:900;margin-bottom:10px}
@@ -316,6 +324,13 @@ footer{background:var(--card);border-top:1px solid var(--line);border-radius:24p
         </div>
       </div>
       <div class="foot-box" id="foot"></div>
+    </div>
+    <div id="footMapWrap" style="margin-top:18px;display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <strong style="font-size:14px">📍 موقع المتجر على الخارطة</strong>
+        <a id="footMapLink" href="#" target="_blank" rel="noopener" class="chip" style="padding:5px 12px;font-size:12px">🗺️ اضغط لفتح الموقع على خرائط Google</a>
+      </div>
+      <iframe id="footMapFrame" loading="lazy" referrerpolicy="no-referrer-when-downgrade" style="width:100%;height:230px;border:1px solid var(--line);border-radius:16px;background:var(--inp)"></iframe>
     </div>
     <div class="foot-copy">
       <span id="footNote">جميع الحقوق محفوظة</span> · مقدّم من شركة <strong style="color:var(--amber)">FRD</strong>
@@ -580,6 +595,25 @@ function applyStoreData(data) {
     ${st.hours ? `<strong>🕒 ساعات العمل:</strong> ${esc(st.hours)}<br>` : ''}
     <strong>📞 للطلب والاستفسار:</strong> ${esc(st.phone || '-')}`;
 
+  const mapQuery = st.map_embed_query || st.address || '';
+  if (st.map_url || mapQuery) {
+    $('footMapWrap').style.display = 'block';
+    if (st.map_url) {
+      $('footMapLink').href = st.map_url;
+      $('footMapLink').style.display = 'inline-flex';
+    } else {
+      $('footMapLink').style.display = 'none';
+    }
+    if (mapQuery) {
+      $('footMapFrame').src = `https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
+      $('footMapFrame').style.display = 'block';
+    } else {
+      $('footMapFrame').style.display = 'none';
+    }
+  } else {
+    $('footMapWrap').style.display = 'none';
+  }
+
   renderCats();
   renderGrid();
 
@@ -615,6 +649,11 @@ async function load() {
 let slideIdx = 0, slideTimer = null;
 function renderSlider(slides) {
   const el = $('promoSlider');
+  const st = S.settings || {};
+  const hCls = st.slider_height === 'compact' ? 'h-compact' : st.slider_height === 'tall' ? 'h-tall' : '';
+  const efCls = st.slider_effect === 'zoom' ? 'ef-zoom' : st.slider_effect === 'slide' ? 'ef-slide' : '';
+  el.className = `slider ${hCls} ${efCls}`.trim();
+  const speed = Number(st.slider_speed ?? 4000);
   slideIdx = 0;
   el.innerHTML = slides.map((s, i) => `
     <div class="slide ${i === 0 ? 'on' : ''}">
@@ -623,6 +662,7 @@ function renderSlider(slides) {
         ${s.badge ? `<span class="slide-badge">${esc(s.badge)}</span>` : ''}
         ${s.title ? `<h2>${esc(s.title)}</h2>` : ''}
         ${s.subtitle ? `<p>${esc(s.subtitle)}</p>` : ''}
+        ${s.btn_text ? `<a class="slide-cta" href="${esc(s.btn_link || '#grid')}" ${s.btn_link && s.btn_link.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}>${esc(s.btn_text)} ←</a>` : ''}
       </div>
     </div>`).join('') + (slides.length > 1 ? `
       <button type="button" class="sl-nav sl-prev" id="slPrev">›</button>
@@ -640,12 +680,20 @@ function renderSlider(slides) {
 
   clearInterval(slideTimer);
   if (slides.length > 1) {
-    slideTimer = setInterval(() => showSlide(slideIdx + 1), 4000);
-    el.onmouseenter = () => clearInterval(slideTimer);
-    el.onmouseleave = () => { clearInterval(slideTimer); slideTimer = setInterval(() => showSlide(slideIdx + 1), 4000); };
+    if (speed > 0) {
+      slideTimer = setInterval(() => showSlide(slideIdx + 1), speed);
+      el.onmouseenter = () => clearInterval(slideTimer);
+      el.onmouseleave = () => { clearInterval(slideTimer); slideTimer = setInterval(() => showSlide(slideIdx + 1), speed); };
+    }
     $('slPrev').onclick = () => showSlide(slideIdx - 1);
     $('slNext').onclick = () => showSlide(slideIdx + 1);
     el.querySelectorAll('[data-sl]').forEach(d => { d.onclick = () => showSlide(Number(d.dataset.sl)); });
+    let tx = 0;
+    el.ontouchstart = e => { tx = e.touches[0].clientX; };
+    el.ontouchend = e => {
+      const dx = e.changedTouches[0].clientX - tx;
+      if (Math.abs(dx) > 40) showSlide(slideIdx + (dx > 0 ? -1 : 1));
+    };
   }
 }
 

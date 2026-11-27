@@ -1633,6 +1633,10 @@ function renderSettings() {
         <div><label>العنوان</label><input id="sAddr" value="${esc(st.address)}"></div>
       </div>
       <div class="row">
+        <div><label>رابط موقع المحل (Google Maps)</label><input id="sMapUrl" dir="ltr" value="${esc(st.map_url || '')}" placeholder="https://maps.app.goo.gl/..."></div>
+        <div><label>اسم الموقع للخريطة المدمجة</label><input id="sMapQuery" value="${esc(st.map_embed_query || '')}" placeholder="كربلاء حي الحسين مستشفى الحجة"></div>
+      </div>
+      <div class="row">
         <div><label>رابط إنستغرام</label><input id="sIg" value="${esc(st.instagram)}"></div>
         <div><label>رابط تيك توك</label><input id="sTt" value="${esc(st.tiktok)}"></div>
       </div>
@@ -1811,8 +1815,35 @@ function renderSettings() {
     </div>
 
     <div class="card">
-      <h2>🖼️ لوحة العروض المتحركة (السلايدر)</h2>
+      <h2>🖼️ لوحة العروض المتحركة المتطورة (السلايدر)</h2>
       <label class="chk" style="margin-bottom:10px"><input id="sShowSl" type="checkbox" ${st.show_slider !== false ? 'checked' : ''}> إظهار لوحة العروض المتحركة في المتجر</label>
+      <div class="row3" style="margin-bottom:12px">
+        <div>
+          <label>سرعة التقليب التلقائي</label>
+          <select id="sSlSpeed">
+            <option value="2500" ${Number(st.slider_speed) === 2500 ? 'selected' : ''}>سريع (2.5 ثانية)</option>
+            <option value="4000" ${Number(st.slider_speed ?? 4000) === 4000 ? 'selected' : ''}>متوسط (4 ثوانٍ)</option>
+            <option value="6000" ${Number(st.slider_speed) === 6000 ? 'selected' : ''}>بطيء (6 ثوانٍ)</option>
+            <option value="0" ${Number(st.slider_speed) === 0 ? 'selected' : ''}>يدوي فقط</option>
+          </select>
+        </div>
+        <div>
+          <label>ارتفاع اللوحة</label>
+          <select id="sSlHeight">
+            <option value="compact" ${st.slider_height === 'compact' ? 'selected' : ''}>مدمج (220px)</option>
+            <option value="medium" ${(st.slider_height || 'medium') === 'medium' ? 'selected' : ''}>متوسط (310px)</option>
+            <option value="tall" ${st.slider_height === 'tall' ? 'selected' : ''}>عريض فاخر (400px)</option>
+          </select>
+        </div>
+        <div>
+          <label>تأثير الحركة</label>
+          <select id="sSlEffect">
+            <option value="fade" ${(st.slider_effect || 'fade') === 'fade' ? 'selected' : ''}>تلاشي ناعم (Fade)</option>
+            <option value="zoom" ${st.slider_effect === 'zoom' ? 'selected' : ''}>تكبير سينمائي (Zoom)</option>
+            <option value="slide" ${st.slider_effect === 'slide' ? 'selected' : ''}>انزلاق جانبي (Slide)</option>
+          </select>
+        </div>
+      </div>
       <div id="slidesWrap"></div>
       <button type="button" class="btn btn-sec" id="addSlideBtn" style="margin-top:8px">+ إضافة عرض / صورة متحركة</button>
     </div>
@@ -1864,6 +1895,10 @@ function renderSettings() {
           <input placeholder="عنوان العرض" data-sli="${i}" data-slk="title" value="${esc(s.title || '')}">
           <input placeholder="وصف مختصر" data-sli="${i}" data-slk="subtitle" value="${esc(s.subtitle || '')}">
           <input placeholder="شارة (مثال: خصم 20%)" data-sli="${i}" data-slk="badge" value="${esc(s.badge || '')}">
+        </div>
+        <div class="row" style="margin-top:6px">
+          <input placeholder="نص الزر (اختياري، مثال: تسوق الآن)" data-sli="${i}" data-slk="btn_text" value="${esc(s.btn_text || '')}">
+          <input placeholder="رابط الزر أو #grid (اختياري)" dir="ltr" data-sli="${i}" data-slk="btn_link" value="${esc(s.btn_link || '')}">
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
           <input type="file" accept="image/*" data-sl-file="${i}" style="width:auto;flex:1">
@@ -1960,6 +1995,8 @@ function renderSettings() {
           whatsapp: $('sWa').value,
           hours: $('sHours').value,
           address: $('sAddr').value,
+          map_url: $('sMapUrl').value,
+          map_embed_query: $('sMapQuery').value,
           footer_note: $('sFoot').value,
           instagram: $('sIg').value,
           tiktok: $('sTt').value,
@@ -1992,6 +2029,9 @@ function renderSettings() {
           vip_customers: $('sVipList').value.split(/[,،\n]/).map(s => s.trim()).filter(Boolean),
           google_client_id: $('sGoogleId').value,
           show_slider: $('sShowSl').checked,
+          slider_speed: Number($('sSlSpeed').value),
+          slider_height: $('sSlHeight').value,
+          slider_effect: $('sSlEffect').value,
           slides: slidesData,
           show_size_chart: $('sShowSz').checked,
           show_stock: $('sShowStk').checked,
