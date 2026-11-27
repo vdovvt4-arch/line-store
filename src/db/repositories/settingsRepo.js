@@ -24,10 +24,12 @@ function cleanSlides(arr) {
     title: String(s?.title || '').trim().slice(0, 100),
     subtitle: String(s?.subtitle || '').trim().slice(0, 200),
     badge: String(s?.badge || '').trim().slice(0, 40),
+    btn_text: String(s?.btn_text || '').trim().slice(0, 40),
+    btn_link: String(s?.btn_link || '').trim().slice(0, 200),
     image: typeof s?.image === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(s.image) && s.image.length < 2e6
       ? s.image
       : '',
-  })).filter(s => s.title || s.subtitle || s.image);
+  })).filter(s => s.title || s.subtitle || s.image || s.btn_text);
 }
 
 async function get() {
@@ -60,6 +62,8 @@ async function update(b) {
     phone: String(b.phone ?? cur.phone).trim().slice(0, 30),
     whatsapp: String(b.whatsapp ?? cur.whatsapp).trim().slice(0, 30),
     address: String(b.address ?? cur.address).trim().slice(0, 200),
+    map_url: String(b.map_url ?? cur.map_url ?? '').trim().slice(0, 300),
+    map_embed_query: String(b.map_embed_query ?? cur.map_embed_query ?? '').trim().slice(0, 200),
     hours: String(b.hours ?? cur.hours).trim().slice(0, 120),
     footer_note: String(b.footer_note ?? cur.footer_note).trim().slice(0, 200),
     announce: String(b.announce ?? cur.announce).trim().slice(0, 200),
@@ -68,6 +72,9 @@ async function update(b) {
     hero_subtitle: String(b.hero_subtitle ?? cur.hero_subtitle).trim().slice(0, 200),
     show_hero: b.show_hero !== undefined ? !!b.show_hero : cur.show_hero,
     show_slider: b.show_slider !== undefined ? !!b.show_slider : cur.show_slider,
+    slider_speed: [0, 2500, 4000, 6000].includes(Number(b.slider_speed)) ? Number(b.slider_speed) : (cur.slider_speed ?? 4000),
+    slider_height: ['compact', 'medium', 'tall'].includes(b.slider_height) ? b.slider_height : (cur.slider_height || 'medium'),
+    slider_effect: ['fade', 'zoom', 'slide'].includes(b.slider_effect) ? b.slider_effect : (cur.slider_effect || 'fade'),
     slides: cleanSlides(b.slides) ?? cur.slides ?? [],
     default_theme: ['dark', 'light'].includes(b.default_theme) ? b.default_theme : cur.default_theme,
     accent_1: cleanColor(b.accent_1, cur.accent_1),
